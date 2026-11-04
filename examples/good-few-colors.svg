@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 200">
+  <!-- Good: a few bright, solid colours (one colour per line) -->
+  <rect width="300" height="200" fill="#fff"/>
+  <g fill="none" stroke-width="8" stroke-linecap="round">
+    <path stroke="#e3122b" d="M40 150 Q90 30 140 150"/>
+    <path stroke="#14b84a" d="M120 150 Q170 30 220 150"/>
+    <path stroke="#1f4fe0" d="M200 150 Q250 30 280 110"/>
+  </g>
+</svg>

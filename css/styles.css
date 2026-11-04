@@ -1,0 +1,203 @@
+/*
+ * Laser Frame Studio — styles
+ *
+ * All colours live in the :root tokens below, so re-theming the app only
+ * means editing these few lines. The UI is intentionally dark: it sits next
+ * to a laser preview drawn on black.
+ */
+
+:root {
+  --bg: #0d0f12;          /* page background */
+  --panel: #161a20;       /* cards and sidebar groups */
+  --panel-2: #1d222a;     /* inputs, chips */
+  --line: #2a313b;        /* borders */
+  --text: #e6e9ee;
+  --muted: #8d96a3;
+  --accent: #39ff88;      /* "laser green" used for primary actions */
+  --accent-ink: #062a14;  /* text on top of the accent colour */
+  --warn: #ffb347;
+  --bad: #ff5d5d;
+  --good: #39ff88;
+  --radius: 10px;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }   /* hidden must win over display: grid/flex below */
+html, body { margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+a { color: var(--accent); }
+
+/* ---------- header & footer ---------- */
+
+.site-header {
+  display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+  padding: 14px 20px; border-bottom: 1px solid var(--line);
+}
+.site-header h1 { font-size: 18px; margin: 0; letter-spacing: .02em; }
+.site-header h1 span { color: var(--accent); }
+.site-header p { margin: 0; color: var(--muted); }
+
+.site-footer {
+  border-top: 1px solid var(--line);
+  padding: 12px 20px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.site-footer p { margin: 2px 0; }
+
+/* ---------- main layout: sidebar of settings + preview stage ---------- */
+
+.layout {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 340px 1fr;
+}
+.sidebar {
+  border-right: 1px solid var(--line);
+  padding: 14px;
+  overflow-y: auto;
+  max-height: calc(100vh - 52px);
+}
+.stage { padding: 16px 20px; min-width: 0; }
+
+/* ---------- collapsible setting groups in the sidebar ---------- */
+
+details.group {
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  margin-bottom: 12px; padding: 4px 12px 10px;
+}
+details.group > summary {
+  cursor: pointer; font-weight: 600; padding: 8px 0; list-style: none;
+  display: flex; justify-content: space-between; align-items: center;
+}
+details.group > summary::-webkit-details-marker { display: none; }
+details.group > summary::after { content: "▾"; color: var(--muted); }
+details.group:not([open]) > summary::after { content: "▸"; }
+.step-num {
+  display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%;
+  background: var(--panel-2); border: 1px solid var(--line); font-size: 12px; margin-right: 8px;
+}
+
+/* one setting = label | control | current value */
+.row {
+  display: grid; grid-template-columns: 112px 1fr 54px; align-items: center; gap: 8px;
+  margin: 8px 0 2px;
+}
+.row.two { grid-template-columns: 112px 1fr; }
+.row output { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; }
+.hint { color: var(--muted); font-size: 12px; margin: 0 0 6px; }
+
+input[type=range] { width: 100%; accent-color: var(--accent); }
+input[type=range]:disabled { opacity: .35; }
+select, input[type=text], input[type=color] {
+  background: var(--panel-2); color: var(--text); border: 1px solid var(--line);
+  border-radius: 6px; padding: 5px 7px; font: inherit; width: 100%;
+}
+input[type=color] { padding: 2px; height: 30px; }
+label.check { display: flex; gap: 6px; align-items: center; color: var(--muted); font-size: 12px; }
+
+button {
+  background: var(--panel-2); color: var(--text); border: 1px solid var(--line);
+  border-radius: 7px; padding: 7px 12px; font: inherit; cursor: pointer;
+}
+button:hover:not(:disabled) { border-color: var(--muted); }
+button:disabled { opacity: .4; cursor: not-allowed; }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 700; }
+button.wide { width: 100%; }
+
+/* ---------- examples & tips ---------- */
+
+.example-hero { margin: 4px 0 10px; }
+.example-hero img { width: 100%; background: #fff; border-radius: 6px; display: block; }
+.example-hero.wall img { background: #000; max-height: 320px; object-fit: cover; }
+.example-hero p { margin: 6px 0 0; font-size: 12px; color: var(--muted); }
+
+.example-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 8px 0; }
+.example-card {
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 6px;
+}
+.example-card img { width: 100%; display: block; border-radius: 4px; background: #fff; aspect-ratio: 3 / 2; object-fit: cover; }
+.example-card h3 { font-size: 12px; margin: 6px 0 2px; }
+.example-card p { font-size: 11px; color: var(--muted); margin: 0; }
+.example-card.good h3::before { content: "✓ "; color: var(--good); }
+.example-card.bad h3::before { content: "✗ "; color: var(--bad); }
+
+.limits { margin: 8px 0; padding-left: 18px; font-size: 12px; color: var(--muted); }
+.limits li { margin-bottom: 5px; }
+.limits b { color: var(--text); }
+.subhead { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 12px 0 4px; }
+
+/* ---------- frame upload ---------- */
+
+.drop {
+  border: 1.5px dashed var(--line); border-radius: var(--radius); padding: 18px 12px;
+  text-align: center; color: var(--muted); cursor: pointer; margin: 6px 0 8px;
+  transition: border-color .15s, background .15s;
+}
+.drop.over, .drop:hover { border-color: var(--accent); background: rgba(57, 255, 136, .05); }
+.drop strong { color: var(--text); display: block; margin-bottom: 2px; }
+
+/* ---------- preview stage ---------- */
+
+.toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+.toolbar .grow { flex: 1; min-width: 140px; }
+.toolbar label.check { font-size: 13px; }
+#status { color: var(--muted); font-size: 12px; margin-left: auto; }
+
+.views { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 14px; align-items: start; }
+.view { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px; }
+.view h2 {
+  font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 8px;
+  display: flex; justify-content: space-between; align-items: center; gap: 8px;
+}
+.view h2 select { width: auto; font-size: 12px; padding: 2px 4px; text-transform: none; letter-spacing: 0; }
+canvas { width: 100%; height: auto; display: block; border-radius: 6px; }
+#laserCanvas { background: #000; aspect-ratio: 1; }
+#sourceCanvas { background: #222; }
+
+.stats { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.stat { background: var(--panel-2); border: 1px solid var(--line); border-radius: 7px; padding: 5px 9px; font-size: 12px; }
+.stat b { font-variant-numeric: tabular-nums; }
+.stat.warn { border-color: var(--warn); color: var(--warn); }
+.stat.bad { border-color: var(--bad); color: var(--bad); }
+
+.empty { color: var(--muted); padding: 32px 20px; max-width: 620px; margin: 0 auto; }
+.empty h2 { color: var(--text); font-size: 20px; margin: 0 0 14px; }
+.guide { margin: 0 0 14px; padding-left: 22px; line-height: 1.5; }
+.guide li { margin-bottom: 10px; padding-left: 4px; }
+.guide li::marker { color: var(--accent); font-weight: 700; }
+.guide b { color: var(--text); }
+
+/* filmstrip of frame thumbnails */
+.strip { display: flex; gap: 8px; overflow-x: auto; padding: 12px 0 4px; }
+.thumb {
+  position: relative; flex: 0 0 auto; width: 92px; border: 2px solid transparent; border-radius: 8px;
+  background: var(--panel); cursor: pointer; padding: 3px;
+}
+.thumb.current { border-color: var(--accent); }
+.thumb img { width: 100%; height: 62px; object-fit: contain; background: #fff; border-radius: 4px; display: block; }
+.thumb .caption { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+.thumb .caption b { color: var(--text); }
+.thumb .remove {
+  position: absolute; top: -6px; right: -6px; width: 20px; height: 20px; padding: 0; border-radius: 50%;
+  font-size: 12px; line-height: 1; display: none;
+}
+.thumb:hover .remove { display: block; }
+
+.export-stats { font-size: 12px; color: var(--muted); margin: 8px 0 0; }
+
+/* ---------- small screens: stack everything ---------- */
+
+@media (max-width: 900px) {
+  .layout { grid-template-columns: 1fr; }
+  .sidebar { border-right: 0; border-bottom: 1px solid var(--line); max-height: none; padding: 12px 16px; }
+  .stage { padding: 12px 16px; }
+  .views { grid-template-columns: 1fr; }
+}

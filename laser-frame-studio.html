@@ -1,0 +1,279 @@
+<!doctype html>
+<!--
+  Laser Frame Studio: animation frames in, LaserCube-ready .ild file out.
+  Open this file in any modern browser. No install, no internet, no build step.
+
+  Layout of this page:
+    header
+    .layout
+      .sidebar   settings, in the order a person uses them (Examples, 1 Frames … 7 Export)
+      .stage     preview toolbar, source + laser previews, frame filmstrip
+    footer       licence and credits
+
+  Each setting's starting value is its value="" attribute below.
+  data-stage="trace" means changing it re-traces the frames; data-stage="laser"
+  means it only rebuilds the laser points (see js/app.js). data-remember means
+  the browser remembers the value for next time (wall canvas settings).
+
+  MIT License, see LICENSE. Project notes for developers and AI agents: AGENTS.md.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Laser Frame Studio</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<header class="site-header">
+  <h1>Laser Frame <span>Studio</span></h1>
+  <p>Animation frames in → LaserCube-ready <code>.ild</code> out. Everything runs in this browser; images never leave your computer.</p>
+</header>
+
+<div class="layout">
+<aside class="sidebar">
+
+  <!-- ======================= Examples & tips ======================= -->
+  <details class="group" id="examplesGroup">
+    <summary><span><span class="step-num">?</span>Examples &amp; tips</span></summary>
+
+    <figure class="example-hero">
+      <img src="examples/fox-line-art.jpg" alt="Hand-drawn fox outline in thin dark lines on white">
+      <p><b>Works great:</b> a 9-frame running fox. Clean dark lines on white, same size and position in every frame, about 650 laser points per frame.</p>
+    </figure>
+    <button class="wide" id="sampleButton">Try the fox sample animation</button>
+
+    <div class="subhead">What works, what doesn't</div>
+    <div class="example-grid">
+      <div class="example-card good">
+        <img src="examples/good-bold-lines.svg" alt="">
+        <h3>Bold lines</h3>
+        <p>Dark marker or pen on white paper. The best case.</p>
+      </div>
+      <div class="example-card good">
+        <img src="examples/good-solid-shapes.svg" alt="">
+        <h3>Solid shapes</h3>
+        <p>Silhouettes and logos. The laser draws their outlines.</p>
+      </div>
+      <div class="example-card good">
+        <img src="examples/good-few-colors.svg" alt="">
+        <h3>A few bright colors</h3>
+        <p>Solid, saturated colors. Each line gets one color.</p>
+      </div>
+      <div class="example-card bad">
+        <img src="examples/bad-photo-shading.svg" alt="">
+        <h3>Photos &amp; shading</h3>
+        <p>Gradients have no clear lines, so they turn into noise.</p>
+      </div>
+      <div class="example-card bad">
+        <img src="examples/bad-tiny-detail.svg" alt="">
+        <h3>Tiny detail</h3>
+        <p>Hatching, dots and small text cause flicker or get lost.</p>
+      </div>
+      <div class="example-card bad">
+        <img src="examples/bad-faint-pencil.svg" alt="">
+        <h3>Faint pencil</h3>
+        <p>Light, sketchy lines get missed. Go over them in marker.</p>
+      </div>
+    </div>
+
+    <div class="subhead">Designing for the JUMP wall</div>
+    <figure class="example-hero wall">
+      <img src="examples/jump-wall-duck.jpg" alt="A blue and red laser duck outline on the tall dark wall of the JUMP building at night">
+      <p>Our outdoor canvas is a tall, dark wall, with glass on both sides. The duck uses the space well: tall, bold and two colors.</p>
+    </figure>
+    <ul class="limits">
+      <li><b>Draw tall:</b> the wall canvas is about 2 wide by 3 tall. Use portrait paper and fill it top to bottom. Tall subjects (people, animals standing up, towers, plants) look great.</li>
+      <li><b>Stay off the edges:</b> leave a little space around your drawing. Lines that reach the sides spill onto the glass and get lost.</li>
+      <li><b>Bold and simple:</b> people watch from across the plaza and the street. Big shapes and a few lines read best from far away.</li>
+      <li><b>Two or three colors:</b> red, blue, green and pink all show up well on the dark wall.</li>
+      <li><b>Check the preview:</b> the dashed box on the laser preview is the wall canvas. Everything should stay inside it.</li>
+    </ul>
+
+    <div class="subhead">Limits at a glance</div>
+    <ul class="limits">
+      <li><b>Files:</b> JPG or PNG, any size. Number them in order (<code>run_01.jpg</code>, <code>run_02.jpg</code> …).</li>
+      <li><b>Keep frames lined up:</b> same canvas size and the drawing in the same place, or the animation jumps around.</li>
+      <li><b>Detail:</b> about 1,000 laser points per frame, roughly 10 to 30 pen strokes. More than that flickers and looks dimmer.</li>
+      <li><b>Separate pieces:</b> keep it under about 50 per frame. Every gap between pieces costs time with the beam off.</li>
+      <li><b>Colors:</b> the laser mixes red, green and blue light, so use up to about 6 bright, solid colors. Black can't be drawn (it's "off"), and gray or black lines show as white.</li>
+      <li><b>Line weight:</b> about 1/100 of the picture's width or thicker, and even throughout.</li>
+      <li><b>Text:</b> big, bold, short. A word or two, not sentences.</li>
+      <li><b>Frames:</b> no hard limit; 8 to 24 is typical. Playback speed is set in LaserOS when you import.</li>
+    </ul>
+  </details>
+
+  <!-- ======================= 1. Frames ======================= -->
+  <details class="group">
+    <summary><span><span class="step-num">1</span>Upload Frames</span></summary>
+    <div class="drop" id="dropZone" tabindex="0">
+      <strong>Drop JPG / PNG frames here</strong>
+      or click to choose. Frames play in filename order (frame1, frame2 … frame10).
+    </div>
+    <input type="file" id="fileInput" accept="image/*" multiple hidden>
+    <div style="display:flex; gap:8px; align-items:center">
+      <span id="frameCount" class="hint" style="margin:0; flex:1">No frames yet</span>
+      <button id="clearButton" disabled>Clear all</button>
+    </div>
+  </details>
+
+  <!-- ======================= 2. Tracing ======================= -->
+  <details class="group">
+    <summary><span><span class="step-num">2</span>Tracing</span></summary>
+    <div class="row two"><span>Art style</span>
+      <select id="artStyle" data-stage="trace">
+        <option value="auto">Mixed (auto-detect)</option>
+        <option value="centerline">Line drawing (trace the strokes)</option>
+        <option value="outline">Filled shapes (trace the edges)</option>
+      </select>
+    </div>
+    <p class="hint">Line drawing: one laser line per pen stroke. Filled shapes: outlines around solid areas. Mixed: strokes become lines and solid blobs get outlines.</p>
+
+    <div class="row"><span>Threshold</span><input type="range" id="threshold" min="1" max="254" value="128" data-stage="trace"><output for="threshold"></output></div>
+    <label class="check" style="margin-left:120px"><input type="checkbox" id="autoThreshold" checked data-stage="trace"> Pick automatically</label>
+    <div class="row two"><span>Ink is…</span>
+      <select id="invert" data-stage="trace">
+        <option value="auto">Auto-detect</option>
+        <option value="off">Dark on light</option>
+        <option value="on">Light on dark</option>
+      </select>
+    </div>
+    <div class="row"><span>Detail</span><input type="range" id="detail" min="200" max="1000" step="50" value="500" data-stage="trace"><output for="detail" data-format="px"></output></div>
+    <div class="row"><span>Blur</span><input type="range" id="blur" min="0" max="4" step="1" value="1" data-stage="trace"><output for="blur"></output></div>
+    <div class="row"><span>Ignore specks</span><input type="range" id="speckSize" min="0" max="400" step="5" value="25" data-stage="trace"><output for="speckSize"></output></div>
+    <p class="hint">Removes dots and holes smaller than this. Raise it to clean up dust and scanner noise.</p>
+  </details>
+
+  <!-- ======================= 3. Simplify ======================= -->
+  <details class="group">
+    <summary><span><span class="step-num">3</span>Simplify</span></summary>
+    <div class="row"><span>Simplify</span><input type="range" id="simplify" min="0" max="6" step="0.1" value="1.2" data-stage="trace"><output for="simplify"></output></div>
+    <div class="row"><span>Smoothing</span><input type="range" id="smoothing" min="0" max="8" step="1" value="2" data-stage="trace"><output for="smoothing"></output></div>
+    <div class="row"><span>Min line length</span><input type="range" id="minLineLength" min="0" max="80" step="1" value="8" data-stage="trace"><output for="minLineLength"></output></div>
+    <div class="row" id="stubRow"><span>Trim stubs</span><input type="range" id="stubLength" min="0" max="40" step="1" value="6" data-stage="trace"><output for="stubLength"></output></div>
+    <p class="hint">Fewer, smoother lines look brighter and flicker less on the laser.</p>
+  </details>
+
+  <!-- ======================= 4. Color ======================= -->
+  <details class="group">
+    <summary><span><span class="step-num">4</span>Color</span></summary>
+    <div class="row two"><span>Color</span>
+      <select id="colorMode" data-stage="laser">
+        <option value="solid">One color</option>
+        <option value="image">Use colors from image</option>
+      </select>
+    </div>
+    <div class="row two" id="colorRow"><span>Laser color</span><input type="color" id="color" value="#00ff40" data-stage="laser"></div>
+  </details>
+
+  <!-- ======================= 5. Wall canvas ======================= -->
+  <!--
+    The safe drawing area on the real wall, as a % of the full laser range.
+    Defaults were measured from the boundary show used at the JUMP wall
+    (IFF_animations.ild: x -17.8k..19.8k, y -28.3k..30.7k ILDA units, with
+    LaserOS set to zoom 58 and rotation -24°). If you change them here, also change
+    WALL_CANVAS_DEFAULTS in js/app.js so "Reset" matches.
+  -->
+  <details class="group">
+    <summary><span><span class="step-num">5</span>Wall canvas</span></summary>
+    <label class="check"><input type="checkbox" id="fitToCanvas" checked data-stage="laser" data-remember> Fit art inside the wall canvas</label>
+    <label class="check"><input type="checkbox" id="showCanvas" checked data-remember> Show the canvas on the laser preview</label>
+    <div class="row"><span>Width</span><input type="range" id="canvasWidth" min="10" max="100" step="0.5" value="57" data-stage="laser" data-remember><output for="canvasWidth" data-format="percent"></output></div>
+    <div class="row"><span>Height</span><input type="range" id="canvasHeight" min="10" max="100" step="0.5" value="90" data-stage="laser" data-remember><output for="canvasHeight" data-format="percent"></output></div>
+    <div class="row"><span>Move left/right</span><input type="range" id="canvasX" min="-45" max="45" step="0.5" value="1.5" data-stage="laser" data-remember><output for="canvasX" data-format="percent"></output></div>
+    <div class="row"><span>Move up/down</span><input type="range" id="canvasY" min="-45" max="45" step="0.5" value="2" data-stage="laser" data-remember><output for="canvasY" data-format="percent"></output></div>
+    <p class="hint" id="canvasShape"></p>
+    <div style="display:flex; gap:8px"><button id="resetCanvasButton">Reset to the JUMP wall</button></div>
+    <p class="hint" style="margin-top:6px">The canvas is the safe area on the wall. Lines outside it land on the glass and lit windows on either side. Measured with LaserOS at zoom 58 and rotation −24°. If those change, the real canvas moves too.</p>
+  </details>
+
+  <!-- ======================= 6. Laser output ======================= -->
+  <details class="group">
+    <summary><span><span class="step-num">6</span>Laser output</span></summary>
+    <div class="row"><span>Size</span><input type="range" id="size" min="20" max="100" step="1" value="92" data-stage="laser"><output for="size" data-format="percent"></output></div>
+    <p class="hint">How much of the wall canvas the art fills (or of the whole laser area when "Fit art inside the wall canvas" is off).</p>
+    <div class="row"><span>Max points</span><input type="range" id="maxPoints" min="200" max="3000" step="50" value="1000" data-stage="laser"><output for="maxPoints"></output></div>
+    <p class="hint">Points per frame. Fewer points means a faster redraw and less flicker. Detailed frames get coarser to fit.</p>
+    <div class="row"><span>Point spacing</span><input type="range" id="pointSpacing" min="200" max="3000" step="50" value="700" data-stage="laser"><output for="pointSpacing"></output></div>
+    <div class="row"><span>Corner hold</span><input type="range" id="cornerHold" min="0" max="10" step="1" value="3" data-stage="laser"><output for="cornerHold"></output></div>
+    <div class="row"><span>Blank hold</span><input type="range" id="blankHold" min="0" max="12" step="1" value="6" data-stage="laser"><output for="blankHold"></output></div>
+    <p class="hint">Hold points keep corners sharp and stop faint "tails" when the beam jumps between shapes.</p>
+    <div class="row"><span>Scan rate</span><input type="range" id="scanRate" min="10000" max="40000" step="1000" value="30000" data-stage="laser"><output for="scanRate" data-format="thousands"></output></div>
+    <p class="hint">Points per second set in LaserOS. Used only for the flicker and duration estimates.</p>
+  </details>
+
+  <!-- ======================= 7. Export ======================= -->
+  <details class="group">
+    <summary><span><span class="step-num">7</span>Export</span></summary>
+    <div class="row"><span>Hold each frame</span><input type="range" id="holdFrames" min="1" max="20" step="1" value="1" data-stage="laser"><output for="holdFrames" data-format="times"></output></div>
+    <p class="hint">Repeats each frame in the file. Usually leave this at 1 and set the speed in LaserOS on import.</p>
+    <div class="row two"><span>File name</span><input type="text" id="fileName" value="laser-animation"></div>
+    <div style="margin-top:10px"><button class="primary wide" id="exportButton" disabled>Download .ild</button></div>
+    <p class="export-stats" id="exportSummary"></p>
+  </details>
+</aside>
+
+<main class="stage">
+  <div class="toolbar">
+    <button id="playButton" disabled>▶ Play</button>
+    <input class="grow" type="range" id="frameSlider" min="0" max="0" value="0" disabled aria-label="Frame">
+    <span id="frameLabel" class="hint" style="margin:0; min-width:70px">–</span>
+    <label class="check">Preview fps <input type="range" id="previewFps" min="1" max="30" value="12" style="width:80px"><output for="previewFps"></output></label>
+    <label class="check"><input type="checkbox" id="showJumps"> Show jumps</label>
+    <label class="check"><input type="checkbox" id="showPoints"> Show points</label>
+    <label class="check"><input type="checkbox" id="showOverlay"> Overlay image</label>
+    <span id="status"></span>
+  </div>
+
+  <!-- Shown until frames are loaded: a short how-to. Matches the sidebar steps. -->
+  <div id="emptyMessage" class="empty">
+    <h2>How to make a laser animation</h2>
+    <ol class="guide">
+      <li><b>Draw your frames.</b> Dark marker on white paper works best. Draw tall, keep each drawing in the same spot, and leave space around the edges.</li>
+      <li><b>Photograph or scan them</b> and number the files in order: <code>dog_01.jpg</code>, <code>dog_02.jpg</code> …</li>
+      <li><b>Open "1 Upload Frames"</b> on the left and drop your files in. Want to practice first? Open <b>Examples &amp; tips</b> and try the fox sample.</li>
+      <li><b>Check the laser preview.</b> Press Play. Everything should stay inside the dashed wall canvas box. If the lines look messy, try "2 Tracing" and "3 Simplify".</li>
+      <li><b>Pick a color</b> in "4 Color", or use the colors from your drawing.</li>
+      <li><b>Open "7 Export"</b>, give it a name and click <b>Download .ild</b>.</li>
+      <li><b>In LaserOS,</b> import the <code>.ild</code> file and choose how fast it plays.</li>
+    </ol>
+    <p class="hint">You can skip the other settings. The defaults are tuned for the JUMP wall.</p>
+  </div>
+
+  <div class="views" id="views" hidden>
+    <div class="view">
+      <h2>Source
+        <select id="sourceView">
+          <option value="clean">Cleaned (what gets traced)</option>
+          <option value="orig">Original</option>
+        </select>
+      </h2>
+      <canvas id="sourceCanvas" width="400" height="400"></canvas>
+    </div>
+    <div class="view">
+      <h2>Laser preview</h2>
+      <canvas id="laserCanvas" width="720" height="720"></canvas>
+      <div class="stats" id="stats"></div>
+    </div>
+  </div>
+  <div class="strip" id="filmstrip"></div>
+</main>
+</div>
+
+<footer class="site-footer">
+  <p>Laser Frame Studio v1.2 · Free and open source under the <a href="LICENSE">MIT License</a>. Use it, change it, share it.</p>
+  <p>Built with <a href="https://claude.com/claude-code">Claude Code</a> 2.1.317 (model: Claude Opus 5.5) · Writes standard ILDA format 5 files · Made for the LaserCube Ultra</p>
+</footer>
+
+<!-- Plain scripts, loaded in order (no modules, so the page works when opened straight from disk). -->
+<script src="js/image-cleanup.js"></script>
+<script src="js/tracing.js"></script>
+<script src="js/path-cleanup.js"></script>
+<script src="js/trace-frame.js"></script>
+<script src="js/laser-path.js"></script>
+<script src="js/ilda-writer.js"></script>
+<script src="js/sample-fox.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

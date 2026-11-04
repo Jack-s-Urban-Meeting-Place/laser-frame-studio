@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 200">
+  <!-- Good: bold, even marker lines on white paper -->
+  <rect width="300" height="200" fill="#fff"/>
+  <g fill="none" stroke="#111" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="150" cy="100" r="62"/>
+    <circle cx="127" cy="84" r="6"/>
+    <circle cx="173" cy="84" r="6"/>
+    <path d="M118 118 Q150 146 182 118"/>
+    <path d="M150 20 V6 M210 40 L222 28 M90 40 L78 28"/>
+  </g>
+</svg>
