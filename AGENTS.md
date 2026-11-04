@@ -121,6 +121,8 @@ frame image
 
 ## Environment notes
 
+- GitHub: https://github.com/Jack-s-Urban-Meeting-Place/laser-frame-studio (public,
+  branch `main`, owned by JUMP's organization). New JUMP projects also go in that org.
 - This GitHub repo holds only the app. Paths starting with `../` (Animations,
   Reference ILDA files, Site Images and Videos, Office) are in the owner's local
   "Laser Cube" folder, one level up, and are not published.

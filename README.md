@@ -5,7 +5,8 @@ Turn a set of animation frames (JPG or PNG) into a `.ild` laser animation for th
 
 - **No install, no internet.** Double-click `laser-frame-studio.html` to open it in a browser.
 - **Private.** Images are processed on your computer and never uploaded anywhere.
-- **Free and open source** under the [MIT License](LICENSE).
+- **Free and open source** under the [MIT License](LICENSE). Source:
+  [github.com/Jack-s-Urban-Meeting-Place/laser-frame-studio](https://github.com/Jack-s-Urban-Meeting-Place/laser-frame-studio)
 
 ## How to use it
 
