@@ -179,11 +179,15 @@ function countPointsOutsideCanvas(points, settings) {
  */
 function buildLaserFrame(trace, settings, startPosition) {
   const toLaser = pictureToLaser(trace.width, trace.height, settings);
-  const paths = trace.paths.map(path => ({
-    closed: path.closed,
-    pts: path.pts.map(toLaser),
-    color: settings.colorMode === 'image' ? path.color : settings.color,
-  }));
+  const paths = trace.paths.map(path => {
+    const color = settings.colorMode === 'image' ? path.color : settings.color;
+    const brightness = path.brightness === undefined ? 1 : path.brightness;   // < 1 for lines fading in/out (in-betweens)
+    return {
+      closed: path.closed,
+      pts: path.pts.map(toLaser),
+      color: color.map(v => Math.round(v * brightness)),
+    };
+  });
   const ordered = orderPaths(paths, startPosition);
 
   let spacing = settings.pointSpacing;

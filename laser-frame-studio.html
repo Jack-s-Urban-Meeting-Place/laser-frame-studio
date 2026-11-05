@@ -6,7 +6,7 @@
   Layout of this page:
     header
     .layout
-      .sidebar   settings, in the order a person uses them (Examples, 1 Frames … 7 Export)
+      .sidebar   settings, in the order a person uses them (Examples, 1 Upload Frames … 8 Export)
       .stage     preview toolbar, source + laser previews, frame filmstrip
     footer       licence and credits
 
@@ -203,9 +203,26 @@
     <p class="hint">Points per second set in LaserOS. Used only for the flicker and duration estimates.</p>
   </details>
 
-  <!-- ======================= 7. Export ======================= -->
+  <!-- ======================= 7. Smooth motion ======================= -->
+  <!-- In-betweens: extra frames made by morphing each drawing into the next (js/inbetweens.js). -->
   <details class="group">
-    <summary><span><span class="step-num">7</span>Export</span></summary>
+    <summary><span><span class="step-num">7</span>Smooth motion</span></summary>
+    <div class="row two"><span>In-betweens</span>
+      <select id="inbetweens" data-stage="laser">
+        <option value="0">Off</option>
+        <option value="1">1 between each frame</option>
+        <option value="2">2 between each frame</option>
+        <option value="3">3 between each frame</option>
+      </select>
+    </div>
+    <label class="check"><input type="checkbox" id="loopInbetweens" checked data-stage="laser"> Also blend the last frame back into the first (for loops)</label>
+    <p class="hint">The computer makes extra frames that slide each line from one drawing to the next. Works best when frames change a little at a time. Pairs that are too different stay as a normal cut (✂).</p>
+    <p class="hint" id="inbetweenSummary"></p>
+  </details>
+
+  <!-- ======================= 8. Export ======================= -->
+  <details class="group">
+    <summary><span><span class="step-num">8</span>Export</span></summary>
     <div class="row"><span>Hold each frame</span><input type="range" id="holdFrames" min="1" max="20" step="1" value="1" data-stage="laser"><output for="holdFrames" data-format="times"></output></div>
     <p class="hint">Repeats each frame in the file. Usually leave this at 1 and set the speed in LaserOS on import.</p>
     <div class="row two"><span>File name</span><input type="text" id="fileName" value="laser-animation"></div>
@@ -235,7 +252,8 @@
       <li><b>Open "1 Upload Frames"</b> on the left and drop your files in. Want to practice first? Open <b>Examples &amp; tips</b> and try the fox sample.</li>
       <li><b>Check the laser preview.</b> Press Play. Everything should stay inside the dashed wall canvas box. If the lines look messy, try "2 Tracing" and "3 Simplify".</li>
       <li><b>Pick a color</b> in "4 Color", or use the colors from your drawing.</li>
-      <li><b>Open "7 Export"</b>, give it a name and click <b>Download .ild</b>.</li>
+      <li><b>Looks choppy?</b> Try "7 Smooth motion" to add in-between frames.</li>
+      <li><b>Open "8 Export"</b>, give it a name and click <b>Download .ild</b>.</li>
       <li><b>In LaserOS,</b> import the <code>.ild</code> file and choose how fast it plays.</li>
     </ol>
     <p class="hint">You can skip the other settings. The defaults are tuned for the JUMP wall.</p>
@@ -252,7 +270,7 @@
       <canvas id="sourceCanvas" width="400" height="400"></canvas>
     </div>
     <div class="view">
-      <h2>Laser preview</h2>
+      <h2>Laser preview <span id="frameKind" class="frame-kind"></span></h2>
       <canvas id="laserCanvas" width="720" height="720"></canvas>
       <div class="stats" id="stats"></div>
     </div>
@@ -262,7 +280,7 @@
 </div>
 
 <footer class="site-footer">
-  <p>Laser Frame Studio v1.2 · Free and open source under the <a href="LICENSE">MIT License</a>. Use it, change it, share it.</p>
+  <p>Laser Frame Studio v1.3 · Free and open source under the <a href="LICENSE">MIT License</a>. Use it, change it, share it.</p>
   <p>Built with <a href="https://claude.com/claude-code">Claude Code</a> 2.1.317 (model: Claude Opus 5.5) · Writes standard ILDA format 5 files · Made for the LaserCube Ultra</p>
 </footer>
 
@@ -271,6 +289,7 @@
 <script src="js/tracing.js"></script>
 <script src="js/path-cleanup.js"></script>
 <script src="js/trace-frame.js"></script>
+<script src="js/inbetweens.js"></script>
 <script src="js/laser-path.js"></script>
 <script src="js/ilda-writer.js"></script>
 <script src="js/sample-fox.js"></script>

@@ -23,8 +23,12 @@ This project is :
 4. **Wall canvas:** the dashed box on the laser preview is the safe area on the
    JUMP wall (tall, about 2 wide × 3 tall). Art is fitted inside it automatically.
    Use the sliders to adjust it for another wall, or **Reset to the JUMP wall**.
-5. **Export:** click **Download .ild**.
-6. In **LaserOS**, import the `.ild` file and set the playback speed (fps).
+5. **Smooth motion (optional):** add 1–3 computer-made in-between frames between
+   each drawing to make choppy animations smoother. Works best when drawings change
+   a little at a time. Frames that are too different stay as a normal cut.
+6. **Export:** click **Download .ild**.
+7. In **LaserOS**, import the `.ild` file and set the playback speed (fps). With
+   in-betweens, raise the fps to match (the app tells you how much).
 
 ## What art works best
 

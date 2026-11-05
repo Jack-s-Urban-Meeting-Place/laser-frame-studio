@@ -182,6 +182,17 @@ canvas { width: 100%; height: auto; display: block; border-radius: 6px; }
   background: var(--panel); cursor: pointer; padding: 3px;
 }
 .thumb.current { border-color: var(--accent); }
+
+/* In-between frames in the filmstrip: thin bars between the thumbnails. */
+.tween {
+  flex: 0 0 10px; align-self: center; height: 56px; padding: 0;
+  border-radius: 5px; border: 1px solid var(--line); background: var(--panel-2); cursor: pointer;
+}
+.tween:hover { border-color: var(--muted); }
+.tween.current { background: var(--accent); border-color: var(--accent); }
+.tween-cut { flex: 0 0 auto; align-self: center; color: var(--warn); font-size: 16px; cursor: help; }
+/* "· in-between 1 of 2" next to the Laser preview heading. One line only, so the page never jumps. */
+.frame-kind { color: var(--accent); text-transform: none; letter-spacing: 0; white-space: nowrap; }
 .thumb img { width: 100%; height: 62px; object-fit: contain; background: #fff; border-radius: 4px; display: block; }
 .thumb .caption { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
 .thumb .caption b { color: var(--text); }
