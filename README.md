@@ -18,6 +18,10 @@ This project is :
 1. Open `laser-frame-studio.html`. New here? Open **Examples & tips** and click
    **Try the fox sample animation**.
 2. **Upload Frames:** drop in your numbered frames (`walk_01.jpg`, `walk_02.jpg` …).
+   Or use **✎ Draw an animation** to draw the frames right in the browser: pick a
+   color, draw, then **Copy frame** and change it a little. Faint "onion skin" copies
+   of the frames before and after help you line things up. **Use these frames on the
+   laser** sends them to the studio, and the lines go straight to the laser (no tracing).
 3. **Tracing / Simplify / Color:** adjust until the laser preview looks clean.
    The "Cleaned" source view shows exactly what is being traced.
 4. **Wall canvas:** the dashed box on the laser preview is the safe area on the

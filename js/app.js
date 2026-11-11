@@ -8,6 +8,7 @@
  *   laser-path.js                                                     vector paths -> laser points
  *   ilda-writer.js                                                    laser points -> .ild file
  *   sample-fox.js                                                     built-in sample animation
+ *   draw-pad.js (loaded after this file)                              "Draw an animation" pad
  *
  * Data flow for each frame:
  *   frame.bitmap  --traceFrame()-->  frame.trace  --buildLaserFrame()-->  frame.laser
@@ -182,7 +183,8 @@ async function retraceAllFrames() {
     if (!frame) continue;
     if (frame.traceKey !== key) {
       setStatus(`Tracing ${done + 1} / ${count}…`);
-      frame.trace = traceFrame(frame, settings);
+      // Drawn frames are already lines; pictures need tracing.
+      frame.trace = frame.drawing ? traceDrawing(frame, settings) : traceFrame(frame, settings);
       frame.traceKey = key;
       frame.cleanPreview = null;
       frame.laser = buildLaserFrame(frame.trace, settings, [0, 0]);
@@ -312,6 +314,24 @@ function loadSampleAnimation() {
   return addFrameFiles(files);
 }
 
+/**
+ * Replaces the studio's frames with frames from the drawing pad (draw-pad.js).
+ * Each has { name, bitmap, thumbUrl, drawing }. Drawn lines keep their own colours.
+ */
+function loadDrawnFrames(frames) {
+  setPlaying(false);
+  state.frames.forEach(frame => URL.revokeObjectURL(frame.thumbUrl));
+  state.frames = frames;
+  state.playList = [];
+  state.position = 0;
+  $('#colorMode').value = 'image';            // keep the colours people drew with
+  if ($('#fileName').value === 'laser-animation') $('#fileName').value = 'my-drawing';
+  $('#examplesGroup').open = false;
+  showDrawnFramesOnly();
+  render();
+  retraceAllFrames();
+}
+
 function removeFrame(index) {
   URL.revokeObjectURL(state.frames[index].thumbUrl);
   state.frames.splice(index, 1);
@@ -339,7 +359,7 @@ function renderSource() {
   const frame = state.frames[currentFrameIndex()];   // for an in-between: the drawing it starts from
   if (!frame) return;
   const canvas = $('#sourceCanvas'), ctx = canvas.getContext('2d');
-  const showCleaned = $('#sourceView').value === 'clean' && frame.trace;
+  const showCleaned = $('#sourceView').value === 'clean' && frame.trace && frame.trace.mask;   // drawn frames have no mask
   const w = showCleaned ? frame.trace.width : frame.bitmap.width;
   const h = showCleaned ? frame.trace.height : frame.bitmap.height;
   const scale = 400 / Math.max(w, h);
@@ -737,6 +757,7 @@ function setUpControls() {
   // Keyboard: ← → step through frames, space plays/pauses.
   document.addEventListener('keydown', event => {
     if (event.target.matches('input[type=text], select')) return;
+    if ($('#studioView').hidden) return;      // the drawing pad has its own keys (draw-pad.js)
     if (!state.playList.length) return;
     if (event.key === 'ArrowRight') stepFrame(1);
     else if (event.key === 'ArrowLeft') stepFrame(-1);

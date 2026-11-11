@@ -204,6 +204,45 @@ canvas { width: 100%; height: auto; display: block; border-radius: 6px; }
 
 .export-stats { font-size: 12px; color: var(--muted); margin: 8px 0 0; }
 
+/* A button that looks like a link, for use inside sentences. */
+button.link { background: none; border: 0; padding: 0; color: var(--accent); text-decoration: underline; font: inherit; cursor: pointer; }
+
+/* ---------- drawing pad ("Draw an animation") ---------- */
+
+.draw-toolbar .draw-title { margin: 0 auto 0 8px; font-size: 16px; }
+.draw-layout { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 16px; align-items: start; }
+.draw-tools {
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 4px 12px 12px;
+}
+.draw-tools .subhead:first-child { margin-top: 8px; }
+.swatches { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.swatch { aspect-ratio: 1; padding: 0; border-radius: 50%; border: 2px solid transparent; }
+.swatch.current { border-color: var(--text); box-shadow: 0 0 0 2px var(--bg) inset; }
+.button-row { display: flex; gap: 6px; margin-bottom: 6px; }
+.button-row button { flex: 1; }
+.draw-tools button.current { border-color: var(--accent); color: var(--accent); }
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+.dot.before { background: rgb(159, 180, 255); }
+.dot.after { background: rgb(255, 179, 107); }
+
+.draw-stage { display: flex; flex-direction: column; align-items: center; min-width: 0; }
+.draw-stage .toolbar { align-self: stretch; justify-content: center; }
+/* The pad keeps the wall's shape and fits the screen height. touch-action stops
+   the page scrolling while drawing with a finger or stylus. */
+.draw-canvas {
+  height: min(68vh, 900px); max-width: 100%; aspect-ratio: auto;
+  border: 1px solid var(--line); border-radius: 6px; background: #050608;
+  touch-action: none; cursor: crosshair;
+}
+.draw-canvas.erasing { cursor: cell; }
+.draw-strip { align-self: stretch; }
+.draw-thumb {
+  flex: 0 0 auto; padding: 3px; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  font-size: 11px; color: var(--muted);
+}
+.draw-thumb canvas { display: block; border-radius: 3px; }
+.draw-thumb.current { border-color: var(--accent); color: var(--accent); }
+
 /* ---------- small screens: stack everything ---------- */
 
 @media (max-width: 900px) {
@@ -211,4 +250,6 @@ canvas { width: 100%; height: auto; display: block; border-radius: 6px; }
   .sidebar { border-right: 0; border-bottom: 1px solid var(--line); max-height: none; padding: 12px 16px; }
   .stage { padding: 12px 16px; }
   .views { grid-template-columns: 1fr; }
+  .draw-layout { grid-template-columns: 1fr; }
+  .draw-canvas { height: auto; width: 100%; }
 }

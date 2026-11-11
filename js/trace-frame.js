@@ -8,6 +8,7 @@
  *
  * The result is cached on the frame by app.js, and only recomputed when a
  * tracing setting changes. Laser settings are applied later (laser-path.js).
+ * Frames drawn on the drawing pad use traceDrawing() instead (bottom of this file).
  */
 'use strict';
 
@@ -84,4 +85,26 @@ function traceFrame(frame, settings) {
   }
 
   return { width, height, mask, threshold, inverted, paths };
+}
+
+/**
+ * Frames drawn on the drawing pad (draw-pad.js) are already lines, so they skip
+ * all of the above: each pen stroke becomes one path, with its own colour.
+ * Only Simplify and Smoothing apply (lightly), to tidy shaky hand-drawn lines.
+ * Returns the same shape as traceFrame(), with no mask (there is no picture to clean).
+ */
+function traceDrawing(frame, settings) {
+  const { width, height, strokes } = frame.drawing;
+  const scale = Math.max(width, height) / REFERENCE_DETAIL;
+  const paths = strokes.map(stroke => {
+    let pts = stroke.pts;
+    if (pts.length === 1) {
+      pts = [pts[0], pts[0]];                           // a dot: the laser draws it as a bright point
+    } else {
+      pts = smoothPath(pts, stroke.closed, Math.min(1, settings.smoothing));
+      pts = simplifyPath(pts, stroke.closed, settings.simplify * scale * 0.5);
+    }
+    return { pts, closed: stroke.closed && pts.length > 2, color: stroke.rgb.slice() };
+  });
+  return { width, height, mask: null, threshold: null, inverted: false, paths };
 }

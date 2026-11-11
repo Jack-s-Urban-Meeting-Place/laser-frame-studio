@@ -6,8 +6,9 @@
   Layout of this page:
     header
     .layout
-      .sidebar   settings, in the order a person uses them (Examples, 1 Upload Frames … 8 Export)
-      .stage     preview toolbar, source + laser previews, frame filmstrip
+      .sidebar   settings, in the order a person uses them (Examples, Draw, 1 Upload Frames … 8 Export)
+      .stage     #studioView: preview toolbar, source + laser previews, frame filmstrip
+                 #drawView:   the drawing pad (shown instead of the studio while drawing)
     footer       licence and credits
 
   Each setting's starting value is its value="" attribute below.
@@ -104,6 +105,14 @@
     </ul>
   </details>
 
+  <!-- ======================= Draw an animation ======================= -->
+  <!-- Opens the drawing pad in the main area (js/draw-pad.js). Drawn frames skip tracing. -->
+  <details class="group" id="drawGroup">
+    <summary><span><span class="step-num">✎</span>Draw an animation</span></summary>
+    <p class="hint">No paper? Draw your frames right here, one at a time, with faint "onion skin" copies of the frame before to guide you. Every line comes out the same thickness on the laser, so just pick a color and draw.</p>
+    <button class="primary wide" id="openDrawPadButton">Open the drawing pad</button>
+  </details>
+
   <!-- ======================= 1. Frames ======================= -->
   <details class="group">
     <summary><span><span class="step-num">1</span>Upload Frames</span></summary>
@@ -161,7 +170,7 @@
     <div class="row two"><span>Color</span>
       <select id="colorMode" data-stage="laser">
         <option value="solid">One color</option>
-        <option value="image">Use colors from image</option>
+        <option value="image">Use colors from image or drawing</option>
       </select>
     </div>
     <div class="row two" id="colorRow"><span>Laser color</span><input type="color" id="color" value="#00ff40" data-stage="laser"></div>
@@ -232,6 +241,8 @@
 </aside>
 
 <main class="stage">
+  <!-- The studio: previews of the loaded frames. Hidden while the drawing pad is open. -->
+  <div id="studioView">
   <div class="toolbar">
     <button id="playButton" disabled>▶ Play</button>
     <input class="grow" type="range" id="frameSlider" min="0" max="0" value="0" disabled aria-label="Frame">
@@ -247,7 +258,7 @@
   <div id="emptyMessage" class="empty">
     <h2>How to make a laser animation</h2>
     <ol class="guide">
-      <li><b>Draw your frames.</b> Dark marker on white paper works best. Draw tall, keep each drawing in the same spot, and leave space around the edges.</li>
+      <li><b>Draw your frames.</b> Dark marker on white paper works best. Draw tall, keep each drawing in the same spot, and leave space around the edges. <b>No paper?</b> <button class="link" id="guideDrawButton">Draw right here</button> instead, then skip to step 4.</li>
       <li><b>Photograph or scan them</b> and number the files in order: <code>dog_01.jpg</code>, <code>dog_02.jpg</code> …</li>
       <li><b>Open "1 Upload Frames"</b> on the left and drop your files in. Want to practice first? Open <b>Examples &amp; tips</b> and try the fox sample.</li>
       <li><b>Check the laser preview.</b> Press Play. Everything should stay inside the dashed wall canvas box. If the lines look messy, try "2 Tracing" and "3 Simplify".</li>
@@ -276,11 +287,80 @@
     </div>
   </div>
   <div class="strip" id="filmstrip"></div>
+  </div>
+
+  <!-- The drawing pad ("Draw an animation", js/draw-pad.js). Hidden until opened. -->
+  <div id="drawView" hidden>
+    <div class="toolbar draw-toolbar">
+      <button id="drawBackButton">← Back to the laser preview</button>
+      <h2 class="draw-title">Draw an animation</h2>
+      <button id="drawNewButton">Start over</button>
+      <button class="primary" id="drawSendButton">Use these frames on the laser →</button>
+    </div>
+
+    <div class="draw-layout">
+      <div class="draw-tools">
+        <div class="subhead">Color</div>
+        <div class="swatches" id="drawColors"></div>
+
+        <div class="subhead">Tool</div>
+        <div class="button-row">
+          <button class="current" id="drawPenButton">✎ Pen</button>
+          <button id="drawEraserButton">⌫ Eraser</button>
+        </div>
+        <div class="button-row">
+          <button id="drawUndoButton">↶ Undo</button>
+          <button id="drawClearButton">Clear frame</button>
+        </div>
+
+        <div class="subhead">Onion skin</div>
+        <p class="hint">Faint copies of nearby frames, so you can draw each frame a little further along.</p>
+        <div class="row two"><span><i class="dot before"></i>Frames before</span>
+          <select id="onionBefore">
+            <option value="0">None</option>
+            <option value="1" selected>1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+          </select>
+        </div>
+        <label class="check"><input type="checkbox" id="onionAfter"> <i class="dot after"></i>Show the next frame too</label>
+
+        <div class="subhead">Frames</div>
+        <div class="button-row">
+          <button id="drawCopyButton" title="Copy this frame into a new frame, then change it a little">⧉ Copy frame</button>
+          <button id="drawAddButton">+ Blank frame</button>
+        </div>
+        <div class="button-row">
+          <button id="drawDeleteButton">Delete frame</button>
+        </div>
+        <p class="hint">Tip: <b>Copy frame</b> and change just a little each time. Small changes make smooth animation.</p>
+      </div>
+
+      <div class="draw-stage">
+        <div class="toolbar">
+          <button id="drawPrevButton" aria-label="Previous frame">◀</button>
+          <span id="drawFrameLabel" class="hint" style="margin:0">Frame 1 of 1</span>
+          <button id="drawNextButton" aria-label="Next frame">▶</button>
+          <button id="drawPlayButton">▶ Play</button>
+          <label class="check">Speed
+            <select id="drawFps">
+              <option value="4">Slow</option>
+              <option value="8" selected>Medium</option>
+              <option value="12">Fast</option>
+            </select>
+          </label>
+        </div>
+        <canvas id="drawCanvas" class="draw-canvas" width="600" height="900"></canvas>
+        <div class="strip draw-strip" id="drawStrip"></div>
+        <p class="hint">Your drawing is saved in this browser as you go. The pad has the same shape as the wall.</p>
+      </div>
+    </div>
+  </div>
 </main>
 </div>
 
 <footer class="site-footer">
-  <p>Laser Frame Studio v1.3 · Free and open source under the <a href="LICENSE">MIT License</a>. Use it, change it, share it.</p>
+  <p>Laser Frame Studio v1.4 · Free and open source under the <a href="LICENSE">MIT License</a>. Use it, change it, share it.</p>
   <p>Built with <a href="https://claude.com/claude-code">Claude Code</a> 2.1.317 (model: Claude Opus 5.5) · Writes standard ILDA format 5 files · Made for the LaserCube Ultra</p>
 </footer>
 
@@ -294,5 +374,6 @@
 <script src="js/ilda-writer.js"></script>
 <script src="js/sample-fox.js"></script>
 <script src="js/app.js"></script>
+<script src="js/draw-pad.js"></script>
 </body>
 </html>
