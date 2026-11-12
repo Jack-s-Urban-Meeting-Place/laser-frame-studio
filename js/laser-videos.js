@@ -7,18 +7,19 @@
  * there before.
  *
  * To add a video: put the file in examples/videos/ and add a line to LASER_VIDEOS.
- * The videos are big, so they are left out of the GitHub copy (see .gitignore).
+ * Keep them small (these are about 1 MB each: 1280×720 MP4, H.264, no sound) so the
+ * GitHub download stays small. MP4 plays in every common browser; .mov may not.
  * If a file is missing, the page says so instead of breaking.
  */
 'use strict';
 
 /** The videos: button label, file in examples/videos/, and a short caption. */
 const LASER_VIDEOS = [
-  { label: 'Cello',   file: 'cello.mov',   caption: 'Cello, filmed from the middle of the plaza.' },
-  { label: 'Bubbles', file: 'bubbles.mov', caption: 'Bubbles, filmed from the middle of the plaza (zoomed in).' },
-  { label: 'Circle',  file: 'circle.mov',  caption: 'Circle, filmed from the middle of the plaza.' },
-  { label: 'Wave',    file: 'wave.mov',    caption: 'Wave, filmed from the middle of the plaza.' },
-  { label: 'Worm',    file: 'worm.mov',    caption: 'Worm, filmed from the middle of the plaza.' },
+  { label: 'Cello',   file: 'cello.mp4',   caption: 'Cello, filmed from the middle of the plaza.' },
+  { label: 'Bubbles', file: 'bubbles.mp4', caption: 'Bubbles, filmed from the middle of the plaza (zoomed in).' },
+  { label: 'Circle',  file: 'circle.mp4',  caption: 'Circle, filmed from the middle of the plaza.' },
+  { label: 'Wave',    file: 'wave.mp4',    caption: 'Wave, filmed from the middle of the plaza.' },
+  { label: 'Worm',    file: 'worm.mp4',    caption: 'Worm, filmed from the middle of the plaza.' },
 ];
 const VIDEO_FOLDER = 'examples/videos/';
 
@@ -75,8 +76,7 @@ function setUpLaserVideos() {
   document.getElementById('laserVideo').addEventListener('error', () => {
     if (document.getElementById('videoView').hidden) return;
     document.getElementById('videoNote').textContent =
-      "This video can't play here. It may not be included in this copy of the app (the videos are " +
-      'left out of the GitHub download to keep it small), or this browser may not play .mov files. Try Chrome or Edge.';
+      "This video can't play here. Check that it's in the examples/videos folder, or try another browser.";
   });
 
   // Starting real work (loading frames, opening the pad…) closes the video first,

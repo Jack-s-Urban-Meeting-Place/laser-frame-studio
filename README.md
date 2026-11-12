@@ -58,7 +58,7 @@ Photos, shading, tiny detail and faint pencil don't convert well. The app's
 | `css/styles.css` | Look and feel; colours are at the top |
 | `js/*.js` | The code, one job per file (see the comment at the top of each) |
 | `examples/` | Pictures used in the Examples & tips panel |
-| `examples/videos/` | Videos of the laser on the JUMP wall (not in the GitHub copy: too big) |
+| `examples/videos/` | Short videos of the laser on the JUMP wall (small MP4s, about 1 MB each) |
 | `images/jump-logo.png` | The JUMP logo |
 | `tools/ilda_inspect.py` | Prints a summary of any `.ild` file (Python 3) |
 | `tools/make-sample.ps1` | Rebuilds the built-in sample animation |

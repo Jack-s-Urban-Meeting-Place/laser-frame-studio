@@ -3,6 +3,8 @@
 *.MOV
 *.mov
 *.mp4
+# ...except the small example videos the app plays (about 1 MB each)
+!examples/videos/*.mp4
 *.psd
 
 # Python and editor clutter
