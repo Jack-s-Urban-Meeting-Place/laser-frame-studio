@@ -1,23 +1,29 @@
 /*
- * draw-pad.js — "Draw an animation": draw frames right in the browser.
+ * draw-pad.js — the drawing pad: draw laser lines right in the browser.
  *
- * People draw one frame at a time on a dark pad that looks like the laser wall.
- * Each pen stroke is kept as a real line (a list of points plus a colour), not
- * as pixels. So when the drawing is sent to the laser, the strokes become laser
- * lines directly (see traceDrawing() in trace-frame.js). No picture tracing is
- * needed, and the lines come out exactly as drawn.
+ * The pad works on the same frames as the studio (state.frames in app.js). Each
+ * frame has two layers:
+ *   - uploaded: a picture or .ild frame added in "1 Draw or upload frames". The pad
+ *     shows it underneath, exactly as the laser will draw it, so Tracing, Color and
+ *     Scale & position (in the sidebar) change what you see here too. It can be sent
+ *     to the laser along with your lines, or used only as a guide to trace over.
+ *   - drawn: your pen strokes, on top. Each stroke is kept as a real line (a list
+ *     of points plus a colour), not as pixels, and goes straight to the laser (see
+ *     traceDrawing() in trace-frame.js). It lands exactly where you drew it.
+ * The pad covers the wall canvas exactly (its shape follows the Wall canvas
+ * settings), so what you see is where it goes on the wall.
  *
  * Features, kept simple on purpose:
  *   - a few bright laser colours (line thickness is fixed: the laser has one width)
- *   - pen, eraser (removes whole lines), undo, clear
- *   - onion skin: faint copies of the previous (and optionally next) frames,
- *     so each new frame can be drawn a little further along
- *   - frames: add a blank frame, copy this frame, delete, step back and forward
+ *   - pen, eraser (removes whole drawn lines), undo, clear
+ *   - onion skin: faint copies of the drawn lines on the frames before (and after),
+ *     and of the first frame (for loops that lead back to the start)
+ *   - frames: copy to the next frame, add a blank frame, delete, step back and forward
  *   - a quick play preview
- *   - "Use these frames on the laser" hands the frames to the studio (app.js)
  *
- * The drawing is autosaved in this browser, so a page reload doesn't lose it.
- * Loaded after app.js, and uses its loadDrawnFrames() and readSettings().
+ * The drawn lines are autosaved in this browser, so a page reload doesn't lose them
+ * (uploaded pictures are not saved). Loaded after app.js, and uses its state,
+ * wallSpace, makeFrame(), readSettings(), uploadedLinesOnWall() and friends.
  */
 'use strict';
 
@@ -40,11 +46,13 @@ const DRAW_COLORS = [
 
 const PAD_WIDTH = 600;                 // drawing size in pad pixels; the height follows the wall canvas shape
 const LINE_WIDTH = 5;                  // every line is this thick: the laser only has one line width
+const UPLOAD_LINE_WIDTH = 3;           // uploaded lines are drawn a little thinner, so your own lines stand out
 const MIN_POINT_GAP = 2;               // ignore pen movements smaller than this (pad pixels)
 const ERASER_RADIUS = 12;              // how close the eraser must come to a line to remove it
 const CLOSE_LOOP_DISTANCE = 12;        // a stroke ending this close to its start becomes a closed loop
 const ONION_BEFORE_COLOR = '159, 180, 255';   // faint blue: frames before this one
 const ONION_AFTER_COLOR = '255, 179, 107';    // faint orange: the frame after this one
+const ONION_FIRST_COLOR = '120, 255, 200';    // faint mint: frame 1, so a loop can lead back to it
 const MAX_UNDO = 60;
 const DRAFT_KEY = 'laserFrameStudio.drawing';
 
@@ -53,9 +61,14 @@ const DRAFT_KEY = 'laserFrameStudio.drawing';
 // ---------------------------------------------------------------------------
 
 const pad = {
-  width: PAD_WIDTH,
-  height: 900,
-  frames: [{ strokes: [] }],   // each stroke: { rgb: [r, g, b], pts: [[x, y], …], closed }
+  // The pad's size is the drawing space (wallSpace in app.js), and its frames are
+  // the studio's frames, so there is only ever one copy of each.
+  get width() { return wallSpace.width; },
+  set width(value) { wallSpace.width = value; },
+  get height() { return wallSpace.height; },
+  set height(value) { wallSpace.height = value; },
+  get frames() { return state.frames; },
+
   current: 0,
   tool: 'pen',                 // 'pen' | 'eraser'
   color: DRAW_COLORS[3].rgb,   // green
@@ -63,21 +76,30 @@ const pad = {
   erasing: false,
   undo: [],                    // [{ frameIndex, strokes }] snapshots taken before each change
   playTimer: null,
+  stripTimer: null,            // waits for sidebar sliders to settle before redrawing every small picture
 };
 
 const padCanvas = () => document.getElementById('drawCanvas');
+const padIsOpen = () => !document.getElementById('drawView').hidden;
 const currentDrawFrame = () => pad.frames[pad.current];
 const rgbText = (rgb, alpha = 1) => `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${alpha})`;
 const copyStrokes = strokes => strokes.map(s => ({ rgb: s.rgb.slice(), pts: s.pts.map(p => p.slice()), closed: s.closed }));
+const checked = id => document.getElementById(id).checked;
+
+/** Call after a frame's drawn lines change, so the studio and the small picture update. */
+function markFrameChanged(frame) {
+  frame.strokesVersion++;
+  frame.thumb = null;
+}
 
 // ---------------------------------------------------------------------------
-// Drawing strokes onto a canvas
+// Drawing onto a canvas
 // ---------------------------------------------------------------------------
 
 /**
- * Draws strokes onto a 2D context. `scale` shrinks them for thumbnails.
- * `style` picks the look: 'laser' (glowing, for the pad), 'paper' (on white, for
- * the studio's source view) or a ghost colour string for the onion skin.
+ * Draws pen strokes onto a 2D context. `scale` shrinks them for thumbnails.
+ * `style` picks the look: 'laser' (glowing, for the pad) or a ghost colour
+ * string for the onion skin.
  */
 function drawStrokes(ctx, strokes, scale, style, alpha = 1) {
   ctx.save();
@@ -85,7 +107,7 @@ function drawStrokes(ctx, strokes, scale, style, alpha = 1) {
   ctx.lineJoin = 'round';
   ctx.lineWidth = Math.max(1, LINE_WIDTH * scale);
   for (const stroke of strokes) {
-    const color = style === 'laser' || style === 'paper' ? rgbText(stroke.rgb, alpha) : `rgba(${style}, ${alpha})`;
+    const color = style === 'laser' ? rgbText(stroke.rgb, alpha) : `rgba(${style}, ${alpha})`;
     ctx.strokeStyle = color;
     ctx.fillStyle = color;
     ctx.shadowColor = style === 'laser' ? color : 'transparent';
@@ -106,55 +128,154 @@ function drawStrokes(ctx, strokes, scale, style, alpha = 1) {
   ctx.restore();
 }
 
-/** Redraws the pad: background, onion skin, then the current frame. */
+/** Draws laser paths ({ pts, closed, color }, in pad pixels): the uploaded layer. */
+function drawLaserPaths(ctx, paths, scale, alpha, width) {
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = Math.max(1, width * scale);
+  for (const path of paths) {
+    ctx.strokeStyle = rgbText(path.color, alpha);
+    ctx.beginPath();
+    path.pts.forEach(([x, y], i) => (i ? ctx.lineTo(x * scale, y * scale) : ctx.moveTo(x * scale, y * scale)));
+    if (path.closed) ctx.closePath();
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/**
+ * The frame's uploaded layer, under the drawing: the original picture (if asked),
+ * then its laser lines. Both are placed by the sidebar's Scale & position, so they
+ * sit exactly where the laser will draw them.
+ */
+function drawUploadedLayer(ctx, frame) {
+  const settings = readSettings();
+  const strength = Number(document.getElementById('uploadStrength').value) / 100;
+  if (frame.bitmap && checked('uploadShowPicture')) {
+    const toLaser = pictureToLaser(frame.bitmap.width, frame.bitmap.height, settings);
+    const toPad = laserToWallSpace(pad.width, pad.height, settings);
+    const [left, top] = toPad(toLaser([0, 0]));
+    const [right, bottom] = toPad(toLaser([frame.bitmap.width, frame.bitmap.height]));
+    ctx.save();
+    ctx.globalAlpha = strength;
+    // Light lines on dark: white paper turns dark, so the pad stays dark like the wall.
+    if (checked('uploadInvert')) ctx.filter = 'invert(1)';
+    ctx.fillStyle = '#fff';                 // transparent pictures count as white paper
+    ctx.fillRect(left, top, right - left, bottom - top);
+    ctx.drawImage(frame.bitmap, left, top, right - left, bottom - top);
+    ctx.restore();
+  }
+  if (checked('uploadShowLines')) {
+    drawLaserPaths(ctx, uploadedLinesOnWall(frame, settings), 1, strength, UPLOAD_LINE_WIDTH);
+  }
+}
+
+/** Redraws the pad: background, uploaded layer, onion skin, then the current frame's drawn lines. */
 function renderPad() {
   const canvas = padCanvas(), ctx = canvas.getContext('2d');
   ctx.fillStyle = '#050608';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
+  const frame = currentDrawFrame();
+  if (!frame) return;
+  drawUploadedLayer(ctx, frame);
 
   if (!pad.playTimer) {
     // Onion skin: earlier frames fade the further back they are.
     const before = Number(document.getElementById('onionBefore').value);
     for (let k = before; k >= 1; k--) {
-      const frame = pad.frames[pad.current - k];
-      if (frame) drawStrokes(ctx, frame.strokes, 1, ONION_BEFORE_COLOR, 0.45 * (1 - (k - 1) / before));
+      const other = pad.frames[pad.current - k];
+      if (other) drawStrokes(ctx, other.strokes, 1, ONION_BEFORE_COLOR, 0.45 * (1 - (k - 1) / before));
     }
     const next = pad.frames[pad.current + 1];
-    if (document.getElementById('onionAfter').checked && next) drawStrokes(ctx, next.strokes, 1, ONION_AFTER_COLOR, 0.4);
+    if (checked('onionAfter') && next) drawStrokes(ctx, next.strokes, 1, ONION_AFTER_COLOR, 0.4);
+    // The first frame, for loops. Skipped if it's already showing as one of the "frames before".
+    const firstAlreadyShown = pad.current - before <= 0;
+    if (checked('onionFirst') && pad.current > 0 && !firstAlreadyShown) {
+      drawStrokes(ctx, pad.frames[0].strokes, 1, ONION_FIRST_COLOR, 0.4);
+    }
   }
-  drawStrokes(ctx, currentDrawFrame().strokes, 1, 'laser');
+  drawStrokes(ctx, frame.strokes, 1, 'laser');
 
   document.getElementById('drawFrameLabel').textContent = `Frame ${pad.current + 1} of ${pad.frames.length}`;
+  document.getElementById('padUseUploads').checked = checked('useUploads');
+  updateUploadInfo();
   document.getElementById('drawUndoButton').disabled = pad.undo.length === 0;
   document.getElementById('drawDeleteButton').disabled = pad.frames.length < 2;
 }
 
-/** Re-draws the small frame pictures under the pad. */
+/** "Under this frame: fox_03.jpg", so people know what they're tracing over. */
+function updateUploadInfo() {
+  const frame = currentDrawFrame();
+  const uploads = pad.frames.filter(hasUpload).length;
+  document.getElementById('uploadInfo').textContent =
+    !uploads ? 'Nothing uploaded yet. Add pictures or a .ild file in "1 Draw or upload frames".'
+    : hasUpload(frame) ? `Under this frame: ${frame.name}`
+    : 'No upload under this frame.';
+}
+
+/**
+ * Re-draws the strip of small frame pictures under the pad. Each picture is
+ * cached on its frame (frame.thumb) and only redrawn after that frame changes,
+ * so files with hundreds of frames stay quick.
+ */
 function renderDrawStrip() {
   const strip = document.getElementById('drawStrip');
   strip.innerHTML = '';
   const scale = 56 / pad.width;
+  const settings = readSettings();
   pad.frames.forEach((frame, index) => {
     const button = document.createElement('button');
     button.className = 'draw-thumb' + (index === pad.current ? ' current' : '');
-    button.title = `Frame ${index + 1}`;
-    const thumb = document.createElement('canvas');
-    thumb.width = 56;
-    thumb.height = Math.round(pad.height * scale);
-    const ctx = thumb.getContext('2d');
-    ctx.fillStyle = '#050608';
-    ctx.fillRect(0, 0, thumb.width, thumb.height);
-    drawStrokes(ctx, frame.strokes, scale, 'laser');
-    button.append(thumb, Object.assign(document.createElement('span'), { textContent: index + 1 }));
+    button.title = `Frame ${index + 1}` + (frame.name ? `: ${frame.name}` : '');
+    if (!frame.thumb) {
+      frame.thumb = document.createElement('canvas');
+      frame.thumb.width = 56;
+      frame.thumb.height = Math.round(pad.height * scale);
+      const ctx = frame.thumb.getContext('2d');
+      ctx.fillStyle = '#050608';
+      ctx.fillRect(0, 0, frame.thumb.width, frame.thumb.height);
+      drawLaserPaths(ctx, uploadedLinesOnWall(frame, settings), scale, 0.5, UPLOAD_LINE_WIDTH);
+      drawStrokes(ctx, frame.strokes, scale, 'laser');
+    }
+    button.append(frame.thumb, Object.assign(document.createElement('span'), { textContent: index + 1 }));
     button.onclick = () => goToDrawFrame(index);
     strip.appendChild(button);
   });
 }
 
+/** After a change to the current frame: redraw the pad and the strip, then autosave. */
 function refreshPad() {
+  markFrameChanged(currentDrawFrame());     // changes always happen on the current frame
   renderPad();
   renderDrawStrip();
   saveDraft();
+}
+
+/**
+ * Called by app.js whenever the studio redraws (a sidebar setting changed, a
+ * picture finished tracing…), so the uploaded layer on the pad follows along.
+ */
+function renderPadIfOpen() {
+  if (!padIsOpen()) return;
+  renderPad();
+  // The small pictures show uploaded lines too. Redraw them once the sliders stop moving.
+  clearTimeout(pad.stripTimer);
+  pad.stripTimer = setTimeout(() => {
+    pad.frames.forEach(frame => { frame.thumb = null; });
+    renderDrawStrip();
+  }, 300);
+}
+
+/** Called by app.js after frames were added or removed in the studio. */
+function padFrameListChanged() {
+  pad.undo = [];                            // undo steps point at frame numbers, which just moved
+  pad.current = Math.max(0, Math.min(pad.current, pad.frames.length - 1));
+  saveDraft();
+  if (!padIsOpen()) return;
+  if (!pad.frames.length) state.frames.push(makeFrame());
+  renderPad();
+  renderDrawStrip();
 }
 
 // ---------------------------------------------------------------------------
@@ -175,7 +296,7 @@ function rememberForUndo() {
   if (pad.undo.length > MAX_UNDO) pad.undo.shift();
 }
 
-/** Removes every line on this frame that passes within ERASER_RADIUS of point p. */
+/** Removes every drawn line on this frame that passes within ERASER_RADIUS of point p. */
 function eraseAt(p) {
   const frame = currentDrawFrame();
   const before = frame.strokes.length;
@@ -244,23 +365,39 @@ function goToDrawFrame(index) {
 }
 
 function addBlankFrame() {
-  pad.frames.splice(pad.current + 1, 0, { strokes: [] });
+  pad.frames.splice(pad.current + 1, 0, makeFrame());
+  pad.undo = [];
   pad.current++;
   refreshPad();
 }
 
-/** Copies this frame to a new frame after it: the quickest way to animate small changes. */
+/**
+ * Copies this frame's drawn lines to the next frame: the quickest way to animate
+ * small changes. If the next frame already has drawn lines (or there is no next
+ * frame), a new frame is added for the copy. A next frame that only has an
+ * upload gets the copy on top, so tracing along a set of pictures stays lined up.
+ */
 function copyFrame() {
-  pad.frames.splice(pad.current + 1, 0, { strokes: copyStrokes(currentDrawFrame().strokes) });
+  const lines = copyStrokes(currentDrawFrame().strokes);
+  const next = pad.frames[pad.current + 1];
+  if (next && !next.strokes.length) {
+    next.strokes = lines;
+  } else {
+    pad.frames.splice(pad.current + 1, 0, makeFrame({ strokes: lines }));
+    pad.undo = [];
+  }
   pad.current++;
   refreshPad();
 }
 
 function deleteFrame() {
   if (pad.frames.length < 2) return;
-  if (currentDrawFrame().strokes.length && !confirm(`Delete frame ${pad.current + 1}? This can't be undone.`)) return;
+  const frame = currentDrawFrame();
+  const losing = [frame.strokes.length && 'its drawn lines', hasUpload(frame) && 'its uploaded picture'].filter(Boolean);
+  if (losing.length && !confirm(`Delete frame ${pad.current + 1} and ${losing.join(' and ')}? This can't be undone.`)) return;
+  if (frame.thumbUrl) URL.revokeObjectURL(frame.thumbUrl);
   pad.frames.splice(pad.current, 1);
-  pad.undo = pad.undo.filter(u => u.frameIndex !== pad.current).map(u => ({ ...u, frameIndex: u.frameIndex > pad.current ? u.frameIndex - 1 : u.frameIndex }));
+  pad.undo = [];
   pad.current = Math.min(pad.current, pad.frames.length - 1);
   refreshPad();
 }
@@ -280,12 +417,14 @@ function undoLastChange() {
   refreshPad();
 }
 
-/** Starts again with one empty frame (asks first). */
+/** Removes every drawn line (asks first). Uploaded frames stay. */
 function startNewDrawing() {
-  const hasLines = pad.frames.some(f => f.strokes.length);
-  if (hasLines && !confirm('Start a new drawing? Your current frames will be cleared.')) return;
-  setPadSize();
-  pad.frames = [{ strokes: [] }];
+  if (!pad.frames.some(f => f.strokes.length)) return;
+  if (!confirm('Remove all the lines you drew, on every frame? Uploaded frames stay.')) return;
+  pad.frames.forEach(frame => { frame.strokes = []; markFrameChanged(frame); });
+  // Frames with nothing left in them go too, but there's always at least one.
+  state.frames = state.frames.filter(hasUpload);
+  if (!state.frames.length) state.frames.push(makeFrame());
   pad.current = 0;
   pad.undo = [];
   refreshPad();
@@ -311,68 +450,90 @@ function stopDrawPlayback() {
 }
 
 // ---------------------------------------------------------------------------
-// Size, autosave, and handing frames to the studio
+// Size and autosave
 // ---------------------------------------------------------------------------
 
-/** Makes the pad the same shape as the wall canvas (tall for the JUMP wall). */
-function setPadSize() {
+/** The pad size (in pad pixels) that has the same shape as the wall canvas. */
+function wallCanvasPadSize() {
   const settings = readSettings();
-  const ratio = settings.canvasWidth / settings.canvasHeight || 1;
-  pad.width = PAD_WIDTH;
-  pad.height = Math.round(PAD_WIDTH / ratio);
-  const canvas = padCanvas();
-  canvas.width = pad.width;
-  canvas.height = pad.height;
+  const ratio = settings.canvasWidth / settings.canvasHeight || 1;   // width ÷ height; about 0.63 for the JUMP wall
+  // Tall walls: 600 wide. Wide walls: 600 tall. So the pad never gets huge.
+  return ratio <= 1
+    ? { width: PAD_WIDTH, height: Math.round(PAD_WIDTH / ratio) }
+    : { width: Math.round(PAD_WIDTH * ratio), height: PAD_WIDTH };
 }
 
+/**
+ * If the wall canvas shape changed since these lines were drawn, reshapes the pad
+ * to match. The drawn lines are scaled evenly (never stretched) and centred, so they fit.
+ * Returns true if anything changed.
+ */
+function matchPadToWallCanvas() {
+  const { width, height } = wallCanvasPadSize();
+  if (width === pad.width && height === pad.height) { fitPadOnScreen(); return false; }
+  const scale = Math.min(width / pad.width, height / pad.height);
+  const shiftX = (width - pad.width * scale) / 2, shiftY = (height - pad.height * scale) / 2;
+  const move = ([x, y]) => [shiftX + x * scale, shiftY + y * scale];
+  for (const frame of pad.frames) {
+    frame.strokes.forEach(stroke => { stroke.pts = stroke.pts.map(move); });
+    markFrameChanged(frame);
+  }
+  pad.undo.forEach(entry => entry.strokes.forEach(stroke => { stroke.pts = stroke.pts.map(move); }));
+  pad.width = width;
+  pad.height = height;
+  padCanvas().width = width;
+  padCanvas().height = height;
+  fitPadOnScreen();
+  saveDraft();
+  return true;
+}
+
+/**
+ * Sizes the pad on screen: as big as fits, always in its true shape so nothing
+ * looks stretched. On computer screens the app is a fixed 16:9 frame, so the pad
+ * gets the height left over in its column after the toolbar, frame strip and hint.
+ * On narrow screens (the page scrolls) it's at most about 2/3 of the window height.
+ */
+function fitPadOnScreen() {
+  const canvas = padCanvas();
+  const area = canvas.parentElement;
+  if (!area || !padIsOpen()) return;
+  const availableWidth = area.clientWidth;
+  let availableHeight = Math.min(window.innerHeight * 0.68, 900);
+  if (window.matchMedia('(min-width: 901px)').matches) {
+    let others = 0;
+    for (const child of area.children) if (child !== canvas) others += child.offsetHeight;
+    availableHeight = Math.max(160, area.clientHeight - others - 20);   // 20 = the gaps between them
+  }
+  const scale = Math.min(availableWidth / pad.width, availableHeight / pad.height);
+  canvas.style.width = Math.floor(pad.width * scale) + 'px';
+  canvas.style.height = Math.floor(pad.height * scale) + 'px';
+}
+
+/** Saves every frame's drawn lines (not the uploads) in this browser. */
 function saveDraft() {
   const round = n => Math.round(n * 10) / 10;
-  const draft = {
-    width: pad.width, height: pad.height,
-    frames: pad.frames.map(f => f.strokes.map(s => ({ rgb: s.rgb, closed: s.closed, pts: s.pts.map(([x, y]) => [round(x), round(y)]) }))),
-  };
-  try { localStorage.setItem(DRAFT_KEY, JSON.stringify(draft)); } catch (error) { /* storage full or blocked: keep going */ }
+  const frames = pad.frames.map(f => f.strokes.map(s => ({ rgb: s.rgb, closed: s.closed, pts: s.pts.map(([x, y]) => [round(x), round(y)]) })));
+  while (frames.length && !frames[frames.length - 1].length) frames.pop();   // empty frames at the end aren't worth keeping
+  try {
+    if (frames.length) localStorage.setItem(DRAFT_KEY, JSON.stringify({ width: pad.width, height: pad.height, frames }));
+    else localStorage.removeItem(DRAFT_KEY);
+  } catch (error) { /* storage full or blocked: keep going */ }
 }
 
+/** Brings back drawn lines saved last time, as frames (re-upload pictures to put them underneath). */
 function loadDraft() {
   let draft = null;
   try { draft = JSON.parse(localStorage.getItem(DRAFT_KEY)); } catch (error) { /* nothing saved */ }
-  if (!draft || !Array.isArray(draft.frames) || !draft.frames.length) return setPadSize();
-  pad.width = draft.width;
-  pad.height = draft.height;
-  pad.frames = draft.frames.map(strokes => ({ strokes }));
+  if (draft && Array.isArray(draft.frames) && draft.frames.length && !state.frames.length) {
+    pad.width = draft.width;
+    pad.height = draft.height;
+    state.frames = draft.frames.map(strokes => makeFrame({ strokes }));
+  }
   padCanvas().width = pad.width;
   padCanvas().height = pad.height;
-}
-
-/** Turns the pad's frames into studio frames (with a paper-style picture for previews). */
-async function sendDrawingToStudio() {
-  const drawn = pad.frames.filter(f => f.strokes.length);
-  if (!drawn.length) return alert('Draw something first!');
-  const loaded = LaserFrameStudio.state.frames;
-  const hasUploads = loaded.some(f => !f.drawing);
-  if (hasUploads && !confirm(`This replaces the ${loaded.length} frame${loaded.length > 1 ? 's' : ''} already in the studio. Continue?`)) return;
-  if (pad.playTimer) stopDrawPlayback();
-
-  const frames = [];
-  for (const [index, frame] of drawn.entries()) {
-    const picture = document.createElement('canvas');
-    picture.width = pad.width;
-    picture.height = pad.height;
-    const ctx = picture.getContext('2d');
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(0, 0, pad.width, pad.height);
-    drawStrokes(ctx, frame.strokes, 1, 'paper');
-    const blob = await new Promise(resolve => picture.toBlob(resolve, 'image/png'));
-    frames.push({
-      name: `drawing_${String(index + 1).padStart(2, '0')}.png`,
-      bitmap: await createImageBitmap(picture),
-      thumbUrl: URL.createObjectURL(blob),
-      drawing: { width: pad.width, height: pad.height, strokes: copyStrokes(frame.strokes) },
-    });
-  }
-  showStudio();
-  loadDrawnFrames(frames);
+  matchPadToWallCanvas();
+  if (state.frames.length) { rebuildAllLaserFrames(); render(); }
 }
 
 // ---------------------------------------------------------------------------
@@ -381,15 +542,27 @@ async function sendDrawingToStudio() {
 
 function showDrawPad() {
   setPlaying(false);
+  if (!state.frames.length) state.frames.push(makeFrame());
+  pad.current = Math.max(0, Math.min(currentFrameIndex(), pad.frames.length - 1));   // start on the frame the studio was showing
   document.getElementById('studioView').hidden = true;
   document.getElementById('drawView').hidden = false;
-  refreshPad();
+  matchPadToWallCanvas();                   // follow the wall canvas shape
+  renderPad();
+  renderDrawStrip();
+  fitPadOnScreen();                         // after the strip is drawn, so its height is known
 }
 
+/** Back to the laser preview, showing the frame that was on the pad. */
 function showStudio() {
   if (pad.playTimer) stopDrawPlayback();
   document.getElementById('drawView').hidden = true;
   document.getElementById('studioView').hidden = false;
+  // Nothing drawn and nothing uploaded: back to the empty "how to" page.
+  if (state.frames.every(frame => !hasUpload(frame) && !frame.strokes.length)) state.frames = [];
+  rebuildAllLaserFrames();
+  const position = state.playList.findIndex(entry => entry.kind === 'drawn' && entry.frameIndex === pad.current);
+  state.position = Math.max(0, position);
+  render();
 }
 
 function setUpDrawPad() {
@@ -425,7 +598,7 @@ function setUpDrawPad() {
   const on = (id, handler) => { document.getElementById(id).onclick = handler; };
   on('openDrawPadButton', showDrawPad);
   on('guideDrawButton', showDrawPad);
-  on('drawBackButton', showStudio);
+  on('drawDoneButton', showStudio);
   on('drawPenButton', () => setTool('pen'));
   on('drawEraserButton', () => setTool('eraser'));
   on('drawUndoButton', undoLastChange);
@@ -437,14 +610,43 @@ function setUpDrawPad() {
   on('drawNextButton', () => goToDrawFrame(pad.current + 1));
   on('drawPlayButton', () => (pad.playTimer ? stopDrawPlayback() : startDrawPlayback()));
   on('drawNewButton', startNewDrawing);
-  on('drawSendButton', sendDrawingToStudio);
-  document.getElementById('onionBefore').onchange = renderPad;
-  document.getElementById('onionAfter').onchange = renderPad;
+
+  // Opening .ild files (from the pad's toolbar or the sidebar): they're uploads, like pictures.
+  const ildaInput = document.getElementById('ildaFileInput');
+  on('drawOpenIldaButton', () => ildaInput.click());
+  on('sidebarOpenIldaButton', () => ildaInput.click());
+  ildaInput.onchange = () => { if (ildaInput.files.length) addFrameFiles(ildaInput.files); ildaInput.value = ''; };
+
+  for (const id of ['onionBefore', 'onionAfter', 'onionFirst', 'uploadShowLines', 'uploadShowPicture', 'uploadInvert']) {
+    document.getElementById(id).onchange = renderPad;
+  }
+  document.getElementById('uploadStrength').addEventListener('input', renderPad);
+
+  // "Use with Export" on the pad is the same setting as the one in the sidebar.
+  document.getElementById('padUseUploads').onchange = event => {
+    const sidebarBox = document.getElementById('useUploads');
+    sidebarBox.checked = event.target.checked;
+    sidebarBox.dispatchEvent(new Event('input'));       // rebuilds the laser frames like any other setting
+  };
+
   document.getElementById('drawFps').onchange = () => { if (pad.playTimer) { stopDrawPlayback(); startDrawPlayback(); } };
+
+  // The drawing space follows the wall canvas: reshape it (and the drawn lines) when
+  // the Wall canvas Width or Height slider is let go, or reset. 'change' fires when
+  // the slider is let go; reshaping on every tiny move would wear the drawing down.
+  const reshape = () => {
+    if (!matchPadToWallCanvas()) return;
+    rebuildAllLaserFrames();
+    render();
+    if (padIsOpen()) renderDrawStrip();
+  };
+  for (const id of ['canvasWidth', 'canvasHeight']) document.getElementById(id).addEventListener('change', reshape);
+  document.getElementById('resetCanvasButton').addEventListener('click', reshape);
+  window.addEventListener('resize', () => { if (padIsOpen()) fitPadOnScreen(); });
 
   // Keyboard on the pad: Ctrl+Z undo, ← → change frame.
   document.addEventListener('keydown', event => {
-    if (document.getElementById('drawView').hidden || event.target.matches('input, select')) return;
+    if (!padIsOpen() || event.target.matches('input, select')) return;
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') { event.preventDefault(); undoLastChange(); }
     else if (event.key === 'ArrowLeft') goToDrawFrame(pad.current - 1);
     else if (event.key === 'ArrowRight') goToDrawFrame(pad.current + 1);

@@ -26,6 +26,7 @@ const BLANK_STEP = 2500;        // ILDA units per point while the beam travels w
 const JOIN_DISTANCE = 500;      // gaps smaller than this are drawn straight through, no blanking
 const CORNER_COS = 0.7;         // turns sharper than ~45° count as a corner (cosine of the angle)
 const MAX_POINT_SPACING = 40000;
+const DEFAULT_ART_SIZE = 0.92;  // "Scale & position" Size at its starting value (keep in sync with value="92" in the HTML)
 
 /**
  * Greedy ordering: from where the beam is now, always draw the nearest
@@ -147,20 +148,60 @@ function wallCanvasBox(settings) {
  *                           centred on it; Size = how much of the canvas it fills.
  *   Fit to wall canvas OFF: the longest side fills Size of the whole laser range,
  *                           centred on the middle (how v1.0 and v1.1 worked).
+ * Then "Scale & position" Left/right and Up/down (artX, artY) move it, measured
+ * as a fraction of the canvas (or of the whole range when Fit is off).
  * Returns a function [x, y] in pixels -> [x, y] in ILDA units (y pointing up).
  */
 function pictureToLaser(width, height, settings) {
   let unitsPerPixel, centerX = 0, centerY = 0;
+  const moveX = settings.artX || 0, moveY = settings.artY || 0;
   if (settings.fitToCanvas) {
     const box = wallCanvasBox(settings);
     unitsPerPixel = settings.size * Math.min(box.width / width, box.height / height);
-    centerX = box.centerX;
-    centerY = box.centerY;
+    centerX = box.centerX + moveX * box.width;
+    centerY = box.centerY + moveY * box.height;
   } else {
     unitsPerPixel = settings.size * ILDA_SPAN / Math.max(width, height);
+    centerX = moveX * ILDA_SPAN;
+    centerY = moveY * ILDA_SPAN;
   }
   return ([x, y]) => [centerX + (x - width / 2) * unitsPerPixel,
                       centerY - (y - height / 2) * unitsPerPixel];
+}
+
+/**
+ * The drawing space: a grid of `width` × `height` "pad pixels" that covers the wall
+ * canvas exactly. Lines drawn on the drawing pad are stored in it, and every frame's
+ * lines (uploaded and drawn) are combined in it before going to the laser (app.js).
+ * Scale & position don't apply here: what you see on the pad is where it lands.
+ * Returns a function [x, y] pad pixels -> [x, y] ILDA units.
+ */
+function wallSpaceToLaser(width, height, settings) {
+  return pictureToLaser(width, height, { ...settings, fitToCanvas: true, size: 1, artX: 0, artY: 0 });
+}
+
+/** The opposite of wallSpaceToLaser: [x, y] ILDA units -> [x, y] pad pixels. */
+function laserToWallSpace(width, height, settings) {
+  const toLaser = wallSpaceToLaser(width, height, settings);
+  const [originX, originY] = toLaser([0, 0]);
+  const unitsPerPixel = toLaser([1, 0])[0] - originX;
+  return ([x, y]) => [(x - originX) / unitsPerPixel, (originY - y) / unitsPerPixel];
+}
+
+/**
+ * Where the lines of an opened .ild file land. At the starting Scale & position the
+ * file plays exactly as it was made. Size then grows or shrinks it around the
+ * middle of the wall canvas, and Left/right, Up/down move it, like any other art.
+ * Returns a function [x, y] ILDA units (from the file) -> [x, y] ILDA units.
+ */
+function ildaArtToLaser(settings) {
+  const box = wallCanvasBox(settings);
+  const fit = settings.fitToCanvas;
+  const centerX = fit ? box.centerX : 0, centerY = fit ? box.centerY : 0;
+  const grow = settings.size / DEFAULT_ART_SIZE;
+  const moveX = (settings.artX || 0) * (fit ? box.width : ILDA_SPAN);
+  const moveY = (settings.artY || 0) * (fit ? box.height : ILDA_SPAN);
+  return ([x, y]) => [centerX + (x - centerX) * grow + moveX, centerY + (y - centerY) * grow + moveY];
 }
 
 /** Counts lit points that fall outside the wall canvas (they would land on the glass). */
@@ -173,14 +214,16 @@ function countPointsOutsideCanvas(points, settings) {
 }
 
 /**
- * Builds the laser frame for one traced frame.
+ * Builds the laser frame for one frame's lines.
+ * `trace` is in the drawing space (see wallSpaceToLaser) and each path already has
+ * its final colour (app.js works those out when it combines a frame's layers).
  * `startPosition` is where the previous frame ended, so the first jump is short.
  * Returns { points, spacing, fitsBudget, lineCount, blankedCount, outsideCount, endPosition }.
  */
 function buildLaserFrame(trace, settings, startPosition) {
-  const toLaser = pictureToLaser(trace.width, trace.height, settings);
+  const toLaser = wallSpaceToLaser(trace.width, trace.height, settings);
   const paths = trace.paths.map(path => {
-    const color = settings.colorMode === 'image' ? path.color : settings.color;
+    const color = path.color;
     const brightness = path.brightness === undefined ? 1 : path.brightness;   // < 1 for lines fading in/out (in-betweens)
     return {
       closed: path.closed,
@@ -213,6 +256,8 @@ function buildLaserFrame(trace, settings, startPosition) {
     points = best;
   }
 
+  // An empty frame (nothing drawn yet) is a single beam-off point: a short pause.
+  if (!points.length) points = [{ x: startPosition[0], y: startPosition[1], r: 0, g: 0, b: 0, blank: true }];
   const last = points[points.length - 1];
   return {
     points,

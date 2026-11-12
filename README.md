@@ -15,18 +15,27 @@ This project is :
 
 ## How to use it
 
-1. Open `laser-frame-studio.html`. New here? Open **Examples & tips** and click
-   **Try the fox sample animation**.
-2. **Upload Frames:** drop in your numbered frames (`walk_01.jpg`, `walk_02.jpg` …).
-   Or use **✎ Draw an animation** to draw the frames right in the browser: pick a
-   color, draw, then **Copy frame** and change it a little. Faint "onion skin" copies
-   of the frames before and after help you line things up. **Use these frames on the
-   laser** sends them to the studio, and the lines go straight to the laser (no tracing).
-3. **Tracing / Simplify / Color:** adjust until the laser preview looks clean.
+1. Open `laser-frame-studio.html`. A quick start guide pops up (reopen it any time
+   with **? Quick start**). New here? Click **Try the fox sample** in it.
+2. **Draw or upload frames:** drop in your numbered frames (`walk_01.jpg`, `walk_02.jpg` …)
+   or a `.ild` file, and/or open the **drawing pad** to draw the frames right in the browser: pick a
+   color, draw, then **Copy to next** and change it a little. Faint "onion skin" copies
+   of the frames before and after help you line things up. Drawn lines go straight to
+   the laser (no tracing). **✓ Done** goes back to the laser preview.
+   - **Upload and draw together:** uploaded frames show on the drawing pad exactly as
+     the laser will draw them, and change with the settings on the left. Draw on top
+     to add your own lines.
+   - **Tracing practice (rotoscoping):** turn off "Use uploaded frames with export"
+     and they become just a guide to draw over.
+   - **Loops:** tick "Show the first frame" so the last frames lead back to the start.
+   - **Open a .ild file** to watch someone else's laser animation or draw on top of it.
+3. **Tracing & simplify / Color:** adjust until the laser preview looks clean.
    The "Cleaned" source view shows exactly what is being traced.
 4. **Wall canvas:** the dashed box on the laser preview is the safe area on the
    JUMP wall (tall, about 2 wide × 3 tall). Art is fitted inside it automatically.
    Use the sliders to adjust it for another wall, or **Reset to the JUMP wall**.
+   **Scale & position** makes anything you upload, draw or open bigger or smaller
+   and moves it (drag the sliders or type a number).
 5. **Smooth motion (optional):** add 1–3 computer-made in-between frames between
    each drawing to make choppy animations smoother. Works best when drawings change
    a little at a time. Frames that are too different stay as a normal cut.
@@ -49,6 +58,8 @@ Photos, shading, tiny detail and faint pencil don't convert well. The app's
 | `css/styles.css` | Look and feel; colours are at the top |
 | `js/*.js` | The code, one job per file (see the comment at the top of each) |
 | `examples/` | Pictures used in the Examples & tips panel |
+| `examples/videos/` | Videos of the laser on the JUMP wall (not in the GitHub copy: too big) |
+| `images/jump-logo.png` | The JUMP logo |
 | `tools/ilda_inspect.py` | Prints a summary of any `.ild` file (Python 3) |
 | `tools/make-sample.ps1` | Rebuilds the built-in sample animation |
 | `AGENTS.md` | Detailed project notes for developers and AI assistants |

@@ -40,7 +40,7 @@ a { color: var(--accent); }
   display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
   padding: 14px 20px; border-bottom: 1px solid var(--line);
 }
-.site-header h1 { font-size: 18px; margin: 0; letter-spacing: .02em; }
+.site-header h1 { font-size: 18px; margin: 0; letter-spacing: .02em; white-space: nowrap; }
 .site-header h1 span { color: var(--accent); }
 .site-header p { margin: 0; color: var(--muted); }
 
@@ -193,7 +193,8 @@ canvas { width: 100%; height: auto; display: block; border-radius: 6px; }
 .tween-cut { flex: 0 0 auto; align-self: center; color: var(--warn); font-size: 16px; cursor: help; }
 /* "· in-between 1 of 2" next to the Laser preview heading. One line only, so the page never jumps. */
 .frame-kind { color: var(--accent); text-transform: none; letter-spacing: 0; white-space: nowrap; }
-.thumb img { width: 100%; height: 62px; object-fit: contain; background: #fff; border-radius: 4px; display: block; }
+.thumb img, .thumb canvas { width: 100%; height: 62px; object-fit: contain; background: #fff; border-radius: 4px; display: block; }
+.thumb canvas { background: #050608; }   /* frames without a picture show their lines */
 .thumb .caption { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
 .thumb .caption b { color: var(--text); }
 .thumb .remove {
@@ -210,6 +211,10 @@ button.link { background: none; border: 0; padding: 0; color: var(--accent); tex
 /* ---------- drawing pad ("Draw an animation") ---------- */
 
 .draw-toolbar .draw-title { margin: 0 auto 0 8px; font-size: 16px; }
+.notice {
+  margin: 0 0 12px; padding: 8px 12px; font-size: 13px;
+  border: 1px solid var(--accent); border-radius: 8px; color: var(--text); background: rgba(57, 255, 136, .06);
+}
 .draw-layout { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 16px; align-items: start; }
 .draw-tools {
   background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 4px 12px 12px;
@@ -224,13 +229,16 @@ button.link { background: none; border: 0; padding: 0; color: var(--accent); tex
 .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
 .dot.before { background: rgb(159, 180, 255); }
 .dot.after { background: rgb(255, 179, 107); }
+.dot.first { background: rgb(120, 255, 200); }
 
 .draw-stage { display: flex; flex-direction: column; align-items: center; min-width: 0; }
 .draw-stage .toolbar { align-self: stretch; justify-content: center; }
-/* The pad keeps the wall's shape and fits the screen height. touch-action stops
-   the page scrolling while drawing with a finger or stylus. */
+/* The pad must always show in its true shape (the wall canvas shape), or drawings
+   and guide pictures look stretched. Its size on screen is worked out in JS
+   (fitPadOnScreen in draw-pad.js), so only the limits live here.
+   touch-action stops the page scrolling while drawing with a finger or stylus. */
 .draw-canvas {
-  height: min(68vh, 900px); max-width: 100%; aspect-ratio: auto;
+  display: block;
   border: 1px solid var(--line); border-radius: 6px; background: #050608;
   touch-action: none; cursor: crosshair;
 }
@@ -251,5 +259,112 @@ button.link { background: none; border: 0; padding: 0; color: var(--accent); tex
   .stage { padding: 12px 16px; }
   .views { grid-template-columns: 1fr; }
   .draw-layout { grid-template-columns: 1fr; }
-  .draw-canvas { height: auto; width: 100%; }
+}
+
+/* ---------- v1.6: logo, typed numbers, help tips, laser videos ---------- */
+
+/* JUMP logo, top right of the header. The picture is white on clear, made for the dark page. */
+.site-header { flex-wrap: nowrap; }                 /* keep the logo on the title row */
+.site-header p { flex: 0 1 auto; min-width: 0; }
+.site-logo { margin-left: auto; align-self: center; flex: none; display: block; line-height: 0; }
+.site-logo img { height: 40px; width: auto; display: block; }
+@media (max-width: 700px) { .site-header p { display: none; } }   /* phones: title and logo only */
+.site-logo:hover img, .site-logo:focus-visible img { opacity: .8; }
+
+/* A slider with a number box you can type in: label | slider | number | unit */
+.row.typed-row { grid-template-columns: 112px 1fr 62px 14px; gap: 6px; }
+input.typed {
+  width: 100%; padding: 4px 6px; text-align: right; font: inherit; font-size: 12px;
+  background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 6px;
+}
+.row .unit { font-style: normal; color: var(--muted); font-size: 12px; }
+
+/* Little "?" circle: hover (or tab to it) to read the explanation. */
+.help-tip {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px; margin-left: 4px; border-radius: 50%;
+  border: 1px solid var(--muted); color: var(--muted);
+  font-size: 10px; text-transform: none; letter-spacing: 0; cursor: help; vertical-align: 1px;
+}
+.help-tip:hover, .help-tip:focus-visible { border-color: var(--accent); color: var(--accent); outline: none; }
+
+/* "See it on the wall" video buttons in Examples & tips (toggle on and off). */
+.video-buttons { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+.video-buttons button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+
+/* The video, shown in the main area instead of the guide or previews. */
+.video-view video {
+  display: block; max-width: 100%; max-height: 75vh; margin: 0 auto;
+  background: #000; border: 1px solid var(--line); border-radius: var(--radius);
+}
+
+/* ---------- v1.6: the whole app in a 16:9 frame ---------- */
+/*
+ * On computer screens everything fits in one 16:9 box, as big as the window allows,
+ * so nothing needs the page to scroll: the sidebar and the drawing tools scroll on
+ * their own, and the previews and the drawing pad shrink to the space they have.
+ * Below 900 px wide (phones, narrow windows) the page stacks and scrolls as normal.
+ */
+.app-frame { display: flex; flex-direction: column; min-height: 100vh; width: 100%; }
+
+@media (min-width: 901px) {
+  body { height: 100vh; overflow: hidden; align-items: center; justify-content: center; background: #07080a; }
+  .app-frame {
+    width: min(100vw, calc(100vh * 16 / 9));
+    height: min(100vh, calc(100vw * 9 / 16));
+    min-height: 0;
+    background: var(--bg);
+    box-shadow: 0 0 0 1px var(--line);
+  }
+  .site-header { padding: 10px 20px; }
+  .site-footer { padding: 6px 20px; }
+  .site-footer p { display: inline; margin: 0 10px 0 0; }
+
+  .layout { flex: 1; min-height: 0; grid-template-rows: minmax(0, 1fr); }
+  .sidebar { max-height: none; min-height: 0; }
+  .stage { display: flex; flex-direction: column; min-height: 0; overflow: auto; padding: 12px 16px; }
+  #videoView, #studioView, #drawView { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+  /* Studio: the previews take whatever height is left above the filmstrip. */
+  .views { flex: 1; min-height: 0; grid-template-rows: minmax(0, 1fr); align-items: stretch; }
+  .view { display: flex; flex-direction: column; min-height: 0; }
+  .view canvas { flex: 1 1 0; min-height: 0; width: 100%; object-fit: contain; }
+  #laserCanvas { aspect-ratio: auto; background: transparent; }
+  #sourceCanvas { background: transparent; }
+  .stats { flex: none; }
+  #filmstrip { flex: none; }
+
+  /* Videos fill the area too. */
+  .video-view video { flex: 1; min-height: 0; width: 100%; max-height: none; object-fit: contain; }
+
+  /* Drawing pad: the tools scroll, the pad is sized in JS to the space left (fitPadOnScreen). */
+  .draw-layout { flex: 1; min-height: 0; grid-template-rows: minmax(0, 1fr); align-items: stretch; }
+  .draw-tools { overflow-y: auto; min-height: 0; }
+  .draw-stage { min-height: 0; overflow: hidden; }
+  .draw-stage > * { flex-shrink: 0; }   /* the strip and toolbar keep their height; the pad is sized to the rest in JS */
+}
+
+/* ---------- v1.6: welcome pop-up (quick start guide) ---------- */
+
+.header-help { margin-left: auto; align-self: center; font-size: 13px; padding: 5px 10px; }
+.header-help + .site-logo { margin-left: 4px; }
+
+.empty-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+
+dialog.welcome {
+  width: min(960px, 94vw); max-height: 90vh; padding: 0; overflow: hidden;
+  border: 1px solid var(--line); border-radius: 14px; background: var(--panel); color: var(--text);
+}
+dialog.welcome[open] { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.4fr); }
+dialog.welcome::backdrop { background: rgba(0, 0, 0, 0.7); }
+.welcome-photo { width: 100%; height: 100%; object-fit: cover; display: block; min-height: 0; }
+.welcome-text { padding: 22px 26px 18px; overflow-y: auto; max-height: 90vh; }
+.welcome-text h2 { margin: 0 0 14px; font-size: 22px; }
+.welcome-text .guide { color: var(--muted); }
+.welcome-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 8px; }
+.welcome-actions .primary { padding: 8px 22px; }
+
+@media (max-width: 700px) {
+  dialog.welcome[open] { grid-template-columns: 1fr; }
+  .welcome-photo { height: 160px; }
 }

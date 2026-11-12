@@ -4,12 +4,15 @@
   Open this file in any modern browser. No install, no internet, no build step.
 
   Layout of this page:
-    header
+    .app-frame   everything below, kept to a 16:9 shape on computer screens
+    header       title, "? Quick start" button, and the JUMP logo (links to jumpboise.org)
     .layout
-      .sidebar   settings, in the order a person uses them (Examples, Draw, 1 Upload Frames … 8 Export)
-      .stage     #studioView: preview toolbar, source + laser previews, frame filmstrip
-                 #drawView:   the drawing pad (shown instead of the studio while drawing)
+      .sidebar   settings, in the order a person uses them (Examples, 1 Draw or upload frames … 8 Export)
+      .stage     #videoView:  a laser video from Examples & tips (shown instead of the rest)
+                 #studioView: preview toolbar, source + laser previews, frame filmstrip
+                 #drawView:   the drawing pad, on the same frames (shown instead of the studio while drawing)
     footer       licence and credits
+    dialog       #welcomeDialog: the quick start guide, shown when the page opens
 
   Each setting's starting value is its value="" attribute below.
   data-stage="trace" means changing it re-traces the frames; data-stage="laser"
@@ -26,10 +29,17 @@
 <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
+<!-- Everything sits in one frame that keeps a 16:9 shape on computer screens, so the
+     whole app fits the window without scrolling the page (see .app-frame in styles.css). -->
+<div class="app-frame">
 
 <header class="site-header">
   <h1>Laser Frame <span>Studio</span></h1>
   <p>Animation frames in → LaserCube-ready <code>.ild</code> out. Everything runs in this browser; images never leave your computer.</p>
+  <button class="header-help" id="quickStartButton" title="Open the quick start guide">? Quick start</button>
+  <a class="site-logo" href="https://jumpboise.org/" target="_blank" rel="noopener" title="Jack's Urban Meeting Place (JUMP)">
+    <img src="images/jump-logo.png" alt="JUMP, Jack's Urban Meeting Place">
+  </a>
 </header>
 
 <div class="layout">
@@ -84,6 +94,10 @@
       <img src="examples/jump-wall-duck.jpg" alt="A blue and red laser duck outline on the tall dark wall of the JUMP building at night">
       <p>Our outdoor canvas is a tall, dark wall, with glass on both sides. The duck uses the space well: tall, bold and two colors.</p>
     </figure>
+    <!-- Videos of real animations on the wall (js/laser-videos.js). The list of
+         videos is in that file. The files live in examples/videos/. -->
+    <p class="hint">See it on the wall: click to play a video, click again to stop.</p>
+    <div class="video-buttons" id="videoButtons"></div>
     <ul class="limits">
       <li><b>Draw tall:</b> the wall canvas is about 2 wide by 3 tall. Use portrait paper and fill it top to bottom. Tall subjects (people, animals standing up, towers, plants) look great.</li>
       <li><b>Stay off the edges:</b> leave a little space around your drawing. Lines that reach the sides spill onto the glass and get lost.</li>
@@ -105,31 +119,38 @@
     </ul>
   </details>
 
-  <!-- ======================= Draw an animation ======================= -->
-  <!-- Opens the drawing pad in the main area (js/draw-pad.js). Drawn frames skip tracing. -->
+  <!-- ======================= 1. Draw or upload frames ======================= -->
+  <!-- One set of frames. Each frame can have an uploaded layer (a picture, traced by
+       js/trace-frame.js, or a frame of a .ild file) and lines drawn on top of it on
+       the drawing pad (js/draw-pad.js). Upload, draw, or both. -->
   <details class="group" id="drawGroup">
-    <summary><span><span class="step-num">✎</span>Draw an animation</span></summary>
-    <p class="hint">No paper? Draw your frames right here, one at a time, with faint "onion skin" copies of the frame before to guide you. Every line comes out the same thickness on the laser, so just pick a color and draw.</p>
-    <button class="primary wide" id="openDrawPadButton">Open the drawing pad</button>
-  </details>
-
-  <!-- ======================= 1. Frames ======================= -->
-  <details class="group">
-    <summary><span><span class="step-num">1</span>Upload Frames</span></summary>
+    <summary><span><span class="step-num">1</span>Draw or upload frames</span></summary>
+    <div class="subhead">Upload</div>
     <div class="drop" id="dropZone" tabindex="0">
-      <strong>Drop JPG / PNG frames here</strong>
+      <strong>Drop JPG / PNG frames or a .ild file here</strong>
       or click to choose. Frames play in filename order (frame1, frame2 … frame10).
     </div>
-    <input type="file" id="fileInput" accept="image/*" multiple hidden>
-    <div style="display:flex; gap:8px; align-items:center">
+    <input type="file" id="fileInput" accept="image/*,.ild,.ILD" multiple hidden>
+    <button class="wide" id="sidebarOpenIldaButton" style="margin-top:6px" title="Open someone else's laser file to watch it, change it or draw on it">Open a .ild file…</button>
+    <label class="check"><input type="checkbox" id="useUploads" checked data-stage="laser"> Use uploaded frames with export</label>
+    <p class="hint">Turn this off to use them only as a guide to trace over on the drawing pad. They then stay out of the laser preview and the .ild file.</p>
+
+    <div class="subhead">Draw</div>
+    <p class="hint">Draw your own lines, on their own or on top of uploaded frames. Every line comes out the same thickness on the laser, so just pick a color and draw.</p>
+    <button class="primary wide" id="openDrawPadButton">Open the drawing pad</button>
+
+    <div style="display:flex; gap:8px; align-items:center; margin-top:10px">
       <span id="frameCount" class="hint" style="margin:0; flex:1">No frames yet</span>
       <button id="clearButton" disabled>Clear all</button>
     </div>
   </details>
 
-  <!-- ======================= 2. Tracing ======================= -->
+  <!-- ======================= 2. Tracing & simplify ======================= -->
+  <!-- How uploaded pictures turn into lines. Drawn frames and .ild files skip tracing,
+       so these only matter for uploaded pictures. -->
   <details class="group">
-    <summary><span><span class="step-num">2</span>Tracing</span></summary>
+    <summary><span><span class="step-num">2</span>Tracing &amp; simplify</span></summary>
+    <p class="hint">How uploaded pictures turn into lines. .ild files are already lines. Simplify and Smoothing also tidy drawn lines a little.</p>
     <div class="row two"><span>Art style</span>
       <select id="artStyle" data-stage="trace">
         <option value="auto">Mixed (auto-detect)</option>
@@ -152,11 +173,8 @@
     <div class="row"><span>Blur</span><input type="range" id="blur" min="0" max="4" step="1" value="1" data-stage="trace"><output for="blur"></output></div>
     <div class="row"><span>Ignore specks</span><input type="range" id="speckSize" min="0" max="400" step="5" value="25" data-stage="trace"><output for="speckSize"></output></div>
     <p class="hint">Removes dots and holes smaller than this. Raise it to clean up dust and scanner noise.</p>
-  </details>
 
-  <!-- ======================= 3. Simplify ======================= -->
-  <details class="group">
-    <summary><span><span class="step-num">3</span>Simplify</span></summary>
+    <div class="subhead">Simplify</div>
     <div class="row"><span>Simplify</span><input type="range" id="simplify" min="0" max="6" step="0.1" value="1.2" data-stage="trace"><output for="simplify"></output></div>
     <div class="row"><span>Smoothing</span><input type="range" id="smoothing" min="0" max="8" step="1" value="2" data-stage="trace"><output for="smoothing"></output></div>
     <div class="row"><span>Min line length</span><input type="range" id="minLineLength" min="0" max="80" step="1" value="8" data-stage="trace"><output for="minLineLength"></output></div>
@@ -164,9 +182,9 @@
     <p class="hint">Fewer, smoother lines look brighter and flicker less on the laser.</p>
   </details>
 
-  <!-- ======================= 4. Color ======================= -->
+  <!-- ======================= 3. Color ======================= -->
   <details class="group">
-    <summary><span><span class="step-num">4</span>Color</span></summary>
+    <summary><span><span class="step-num">3</span>Color</span></summary>
     <div class="row two"><span>Color</span>
       <select id="colorMode" data-stage="laser">
         <option value="solid">One color</option>
@@ -176,7 +194,7 @@
     <div class="row two" id="colorRow"><span>Laser color</span><input type="color" id="color" value="#00ff40" data-stage="laser"></div>
   </details>
 
-  <!-- ======================= 5. Wall canvas ======================= -->
+  <!-- ======================= 4. Wall canvas ======================= -->
   <!--
     The safe drawing area on the real wall, as a % of the full laser range.
     Defaults were measured from the boundary show used at the JUMP wall
@@ -185,7 +203,7 @@
     WALL_CANVAS_DEFAULTS in js/app.js so "Reset" matches.
   -->
   <details class="group">
-    <summary><span><span class="step-num">5</span>Wall canvas</span></summary>
+    <summary><span><span class="step-num">4</span>Wall canvas</span></summary>
     <label class="check"><input type="checkbox" id="fitToCanvas" checked data-stage="laser" data-remember> Fit art inside the wall canvas</label>
     <label class="check"><input type="checkbox" id="showCanvas" checked data-remember> Show the canvas on the laser preview</label>
     <div class="row"><span>Width</span><input type="range" id="canvasWidth" min="10" max="100" step="0.5" value="57" data-stage="laser" data-remember><output for="canvasWidth" data-format="percent"></output></div>
@@ -197,11 +215,27 @@
     <p class="hint" style="margin-top:6px">The canvas is the safe area on the wall. Lines outside it land on the glass and lit windows on either side. Measured with LaserOS at zoom 58 and rotation −24°. If those change, the real canvas moves too.</p>
   </details>
 
+  <!-- ======================= 5. Scale & position ======================= -->
+  <!--
+    Resizes and moves whatever is loaded (uploaded pictures, drawings, opened .ild
+    files) on the laser. Applied in pictureToLaser() in js/laser-path.js.
+    Each slider has a number box (class="typed") so people can type an exact amount;
+    js/app.js keeps the two in step. If you change a default here, also change
+    SCALE_POSITION_DEFAULTS in js/app.js so "Reset" matches.
+  -->
+  <details class="group">
+    <summary><span><span class="step-num">5</span>Scale &amp; position</span></summary>
+    <p class="hint">Make the art bigger or smaller and move it around. Works on anything you upload, draw or open. Drag a slider or type a number.</p>
+    <div class="row typed-row"><span>Size</span><input type="range" id="size" min="10" max="300" step="1" value="92" data-stage="laser"><input type="number" class="typed" data-for="size" aria-label="Size in percent"><i class="unit">%</i></div>
+    <div class="row typed-row"><span>Left / right</span><input type="range" id="artX" min="-100" max="100" step="0.5" value="0" data-stage="laser"><input type="number" class="typed" data-for="artX" aria-label="Left or right in percent"><i class="unit">%</i></div>
+    <div class="row typed-row"><span>Up / down</span><input type="range" id="artY" min="-100" max="100" step="0.5" value="0" data-stage="laser"><input type="number" class="typed" data-for="artY" aria-label="Up or down in percent"><i class="unit">%</i></div>
+    <div style="display:flex; gap:8px"><button id="resetScaleButton">Reset size &amp; position</button></div>
+    <p class="hint" style="margin-top:6px">Size is how much of the wall canvas the art fills (or of the whole laser area when "Fit art inside the wall canvas" is off). Moving is measured in % of the canvas: + is right and up.</p>
+  </details>
+
   <!-- ======================= 6. Laser output ======================= -->
   <details class="group">
     <summary><span><span class="step-num">6</span>Laser output</span></summary>
-    <div class="row"><span>Size</span><input type="range" id="size" min="20" max="100" step="1" value="92" data-stage="laser"><output for="size" data-format="percent"></output></div>
-    <p class="hint">How much of the wall canvas the art fills (or of the whole laser area when "Fit art inside the wall canvas" is off).</p>
     <div class="row"><span>Max points</span><input type="range" id="maxPoints" min="200" max="3000" step="50" value="1000" data-stage="laser"><output for="maxPoints"></output></div>
     <p class="hint">Points per frame. Fewer points means a faster redraw and less flicker. Detailed frames get coarser to fit.</p>
     <div class="row"><span>Point spacing</span><input type="range" id="pointSpacing" min="200" max="3000" step="50" value="700" data-stage="laser"><output for="pointSpacing"></output></div>
@@ -241,6 +275,20 @@
 </aside>
 
 <main class="stage">
+  <!-- A video of the laser on the real wall (Examples & tips, js/laser-videos.js).
+       Shown instead of everything else in this area until it's switched off. -->
+  <div id="videoView" class="video-view" hidden>
+    <div class="toolbar">
+      <h2 class="draw-title" id="videoTitle">On the wall</h2>
+      <button id="videoCloseButton">✕ Close video</button>
+    </div>
+    <video id="laserVideo" controls loop playsinline muted></video>
+    <p class="hint" id="videoNote"></p>
+  </div>
+
+  <!-- Short messages, e.g. after opening a .ild file (showNotice() in js/app.js). -->
+  <p class="notice" id="notice" hidden></p>
+
   <!-- The studio: previews of the loaded frames. Hidden while the drawing pad is open. -->
   <div id="studioView">
   <div class="toolbar">
@@ -254,20 +302,15 @@
     <span id="status"></span>
   </div>
 
-  <!-- Shown until frames are loaded: a short how-to. Matches the sidebar steps. -->
+  <!-- Shown until frames are loaded. The full how-to is the welcome pop-up (#welcomeDialog). -->
   <div id="emptyMessage" class="empty">
-    <h2>How to make a laser animation</h2>
-    <ol class="guide">
-      <li><b>Draw your frames.</b> Dark marker on white paper works best. Draw tall, keep each drawing in the same spot, and leave space around the edges. <b>No paper?</b> <button class="link" id="guideDrawButton">Draw right here</button> instead, then skip to step 4.</li>
-      <li><b>Photograph or scan them</b> and number the files in order: <code>dog_01.jpg</code>, <code>dog_02.jpg</code> …</li>
-      <li><b>Open "1 Upload Frames"</b> on the left and drop your files in. Want to practice first? Open <b>Examples &amp; tips</b> and try the fox sample.</li>
-      <li><b>Check the laser preview.</b> Press Play. Everything should stay inside the dashed wall canvas box. If the lines look messy, try "2 Tracing" and "3 Simplify".</li>
-      <li><b>Pick a color</b> in "4 Color", or use the colors from your drawing.</li>
-      <li><b>Looks choppy?</b> Try "7 Smooth motion" to add in-between frames.</li>
-      <li><b>Open "8 Export"</b>, give it a name and click <b>Download .ild</b>.</li>
-      <li><b>In LaserOS,</b> import the <code>.ild</code> file and choose how fast it plays.</li>
-    </ol>
-    <p class="hint">You can skip the other settings. The defaults are tuned for the JUMP wall.</p>
+    <h2>Nothing here yet</h2>
+    <p>Upload some frames or draw your own to get started.</p>
+    <div class="empty-actions">
+      <button class="primary" id="emptyGuideButton">Show the quick start guide</button>
+      <button id="emptySampleButton">Try the fox sample</button>
+      <button id="emptyDrawButton">Open the drawing pad</button>
+    </div>
   </div>
 
   <div class="views" id="views" hidden>
@@ -292,11 +335,12 @@
   <!-- The drawing pad ("Draw an animation", js/draw-pad.js). Hidden until opened. -->
   <div id="drawView" hidden>
     <div class="toolbar draw-toolbar">
-      <button id="drawBackButton">← Back to the laser preview</button>
-      <h2 class="draw-title">Draw an animation</h2>
-      <button id="drawNewButton">Start over</button>
-      <button class="primary" id="drawSendButton">Use these frames on the laser →</button>
+      <h2 class="draw-title">Drawing pad</h2>
+      <button id="drawNewButton" title="Removes the lines you drew on every frame. Uploaded frames stay.">Start over</button>
+      <button id="drawOpenIldaButton" title="Open a laser file (.ild) to watch it or draw on it">Open .ild…</button>
+      <button class="primary" id="drawDoneButton">✓ Done: see it on the laser</button>
     </div>
+    <input type="file" id="ildaFileInput" accept=".ild,.ILD" multiple hidden>
 
     <div class="draw-layout">
       <div class="draw-tools">
@@ -314,7 +358,6 @@
         </div>
 
         <div class="subhead">Onion skin</div>
-        <p class="hint">Faint copies of nearby frames, so you can draw each frame a little further along.</p>
         <div class="row two"><span><i class="dot before"></i>Frames before</span>
           <select id="onionBefore">
             <option value="0">None</option>
@@ -324,16 +367,26 @@
           </select>
         </div>
         <label class="check"><input type="checkbox" id="onionAfter"> <i class="dot after"></i>Show the next frame too</label>
+        <label class="check"><input type="checkbox" id="onionFirst"> <i class="dot first"></i>Show the first frame (for loops)</label>
+        <div class="subhead">Uploaded frames
+          <span class="help-tip" tabindex="0" title="Pictures and .ild files you add in &quot;1 Draw or upload frames&quot; show here under your drawing, exactly where the laser will draw them. Change them with the settings on the left (Tracing &amp; simplify, Color, Scale &amp; position). Picture 1 sits under frame 1, picture 2 under frame 2, and so on. Draw on top to add to them, or turn off &quot;Use with Export&quot; to just trace over them (they then stay out of the laser preview and the .ild file).">?</span>
+        </div>
+        <label class="check"><input type="checkbox" id="padUseUploads" checked> Use with Export</label>
+        <label class="check"><input type="checkbox" id="uploadShowLines" checked> Show their laser lines</label>
+        <label class="check"><input type="checkbox" id="uploadShowPicture"> Show the picture</label>
+        <label class="check" style="margin-left:22px"><input type="checkbox" id="uploadInvert" checked> Light lines on dark</label>
+        <div class="row"><span>Strength</span><input type="range" id="uploadStrength" min="10" max="100" step="5" value="60"><output for="uploadStrength" data-format="percent"></output></div>
+        <p class="hint" id="uploadInfo"></p>
 
         <div class="subhead">Frames</div>
         <div class="button-row">
-          <button id="drawCopyButton" title="Copy this frame into a new frame, then change it a little">⧉ Copy frame</button>
+          <button id="drawCopyButton" title="Copies your lines to the next frame (adding one if needed). Then change them a little.">⧉ Copy to next</button>
           <button id="drawAddButton">+ Blank frame</button>
         </div>
         <div class="button-row">
           <button id="drawDeleteButton">Delete frame</button>
         </div>
-        <p class="hint">Tip: <b>Copy frame</b> and change just a little each time. Small changes make smooth animation.</p>
+        <p class="hint">Tip: <b>Copy to next</b> and change just a little each time. Small changes make smooth animation.</p>
       </div>
 
       <div class="draw-stage">
@@ -352,7 +405,7 @@
         </div>
         <canvas id="drawCanvas" class="draw-canvas" width="600" height="900"></canvas>
         <div class="strip draw-strip" id="drawStrip"></div>
-        <p class="hint">Your drawing is saved in this browser as you go. The pad has the same shape as the wall.</p>
+        <p class="hint">The pad is the wall canvas: your lines land exactly where you draw them. They're saved in this browser as you go.</p>
       </div>
     </div>
   </div>
@@ -360,9 +413,34 @@
 </div>
 
 <footer class="site-footer">
-  <p>Laser Frame Studio v1.4 · Free and open source under the <a href="LICENSE">MIT License</a>. Use it, change it, share it.</p>
+  <p>Laser Frame Studio v1.6 · Free and open source under the <a href="LICENSE">MIT License</a>. Use it, change it, share it.</p>
   <p>Built with <a href="https://claude.com/claude-code">Claude Code</a> 2.1.317 (model: Claude Opus 5.5) · Writes standard ILDA format 5 files · Made for the LaserCube Ultra</p>
 </footer>
+</div>
+
+<!-- Welcome pop-up: the quick start guide, shown when the page opens (js/welcome.js).
+     "? Quick start" in the header opens it again. -->
+<dialog class="welcome" id="welcomeDialog" aria-labelledby="welcomeTitle">
+  <img class="welcome-photo" src="examples/welcome-duck.jpg" alt="A blue and red laser duck on the tall dark wall of the JUMP building at night">
+  <div class="welcome-text">
+    <h2 id="welcomeTitle">How to make a laser animation</h2>
+    <ol class="guide">
+      <li><b>Draw your frames.</b> Dark marker on white paper works best. Draw tall, keep each drawing in the same spot, and leave space around the edges. <b>No paper?</b> <button class="link" id="guideDrawButton" data-close>Draw right here</button> instead, then skip to step 4. You can also draw on top of uploaded frames.</li>
+      <li><b>Photograph or scan them</b> and number the files in order: <code>dog_01.jpg</code>, <code>dog_02.jpg</code> …</li>
+      <li><b>Open "1 Draw or upload frames"</b> on the left and drop your files in. Want to practice first? <button class="link" id="guideSampleButton" data-close>Try the fox sample</button>.</li>
+      <li><b>Check the laser preview.</b> Press Play. Everything should stay inside the dashed wall canvas box. If the lines look messy, try "2 Tracing &amp; simplify". To make it bigger, smaller or move it, use "5 Scale &amp; position".</li>
+      <li><b>Pick a color</b> in "3 Color", or use the colors from your drawing.</li>
+      <li><b>Looks choppy?</b> Try "7 Smooth motion" to add in-between frames.</li>
+      <li><b>Open "8 Export"</b>, give it a name and click <b>Download .ild</b>.</li>
+      <li><b>In LaserOS,</b> import the <code>.ild</code> file and choose how fast it plays.</li>
+    </ol>
+    <p class="hint">You can skip the other settings. The defaults are tuned for the JUMP wall.</p>
+    <div class="welcome-actions">
+      <label class="check"><input type="checkbox" id="welcomeShowOnStart" checked> Show this when the page opens</label>
+      <button class="primary" id="welcomeCloseButton" data-close>Let's go</button>
+    </div>
+  </div>
+</dialog>
 
 <!-- Plain scripts, loaded in order (no modules, so the page works when opened straight from disk). -->
 <script src="js/image-cleanup.js"></script>
@@ -372,8 +450,11 @@
 <script src="js/inbetweens.js"></script>
 <script src="js/laser-path.js"></script>
 <script src="js/ilda-writer.js"></script>
+<script src="js/ilda-reader.js"></script>
 <script src="js/sample-fox.js"></script>
 <script src="js/app.js"></script>
 <script src="js/draw-pad.js"></script>
+<script src="js/laser-videos.js"></script>
+<script src="js/welcome.js"></script>
 </body>
 </html>

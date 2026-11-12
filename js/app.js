@@ -6,14 +6,23 @@
  *   image-cleanup.js, tracing.js, path-cleanup.js, trace-frame.js   picture -> vector paths
  *   inbetweens.js                                                     morphs between traced frames
  *   laser-path.js                                                     vector paths -> laser points
- *   ilda-writer.js                                                    laser points -> .ild file
+ *   ilda-writer.js, ilda-reader.js                                    laser points <-> .ild file
  *   sample-fox.js                                                     built-in sample animation
- *   draw-pad.js (loaded after this file)                              "Draw an animation" pad
+ *   draw-pad.js (loaded after this file)                              the drawing pad
  *
+ * One list of frames is shared by the studio and the drawing pad. Each frame has
+ * two layers, and either can be empty:
+ *   uploaded:  a picture (traced into lines) or a frame of an opened .ild file.
+ *              Tracing, Color and Scale & position change it.
+ *   drawn:     lines drawn on the drawing pad, kept exactly where they were drawn.
  * Data flow for each frame:
- *   frame.bitmap  --traceFrame()-->  frame.trace  --buildLaserFrame()-->  frame.laser
- * Changing a "trace" setting re-traces every frame (slow-ish, done in the background).
- * Changing a "laser" setting only rebuilds frame.laser (fast). Each input in the HTML
+ *   frame.bitmap --traceFrame()--> frame.sourceTrace --placed on the wall--> uploaded lines --+
+ *   frame.strokes --traceDrawing()---------------------------------------->  drawn lines ----+--> frame.trace
+ *   frame.trace --buildLaserFrame()--> frame.laser
+ * frame.trace is in the "drawing space" (the wall canvas in pad pixels, see
+ * wallSpace below), so the pad can show exactly what the laser will draw.
+ * Changing a "trace" setting re-traces every picture (slow-ish, done in the background).
+ * Changing a "laser" setting only rebuilds the rest (fast). Each input in the HTML
  * says which kind it is with data-stage="trace" or data-stage="laser".
  *
  * The play list: what actually plays and gets exported. It is the drawn frames in
@@ -26,13 +35,42 @@
 const $ = selector => document.querySelector(selector);
 
 const state = {
-  frames: [],          // the drawn frames: [{ name, bitmap, thumbUrl, working, trace, traceKey, laser, cleanPreview, inbetweenCache }]
+  frames: [],          // every frame: see makeFrame() below
   playList: [],        // what plays: drawn frames + in-betweens (see makePlayList)
   position: 0,         // index in the play list of the frame shown in the preview
   traceRun: 0,         // bumps on every re-trace, so an outdated run can stop early
   playing: false,
   playTimer: null,
 };
+
+/**
+ * The drawing space: the wall canvas measured in "pad pixels". Drawn lines are stored
+ * in these units. draw-pad.js reshapes it (and the drawn lines) when the wall
+ * canvas changes shape. 600 wide for a tall wall, 600 tall for a wide one.
+ */
+const wallSpace = { width: 600, height: 947 };
+
+/**
+ * A new frame. Uploads fill in the uploaded layer:
+ *   bitmap, thumbUrl      an uploaded picture (traced into sourceTrace)
+ *   ilda: true            a frame from an opened .ild file (its lines are sourceTrace)
+ * The drawing pad fills in strokes (and bumps strokesVersion when they change).
+ */
+function makeFrame(fields = {}) {
+  return {
+    name: '',
+    strokes: [],           // drawn lines: [{ rgb, pts: [[x, y], ...], closed }] in pad pixels
+    strokesVersion: 0,
+    sourceTrace: null,     // the uploaded layer's lines, before Scale & position
+    traceKey: null,        // which tracing settings sourceTrace was made with
+    trace: null,           // both layers combined, in the drawing space
+    laser: null,           // the finished laser points
+    ...fields,
+  };
+}
+
+/** Does this frame have an uploaded picture or .ild frame under the drawing? */
+const hasUpload = frame => Boolean(frame.bitmap || frame.ilda);
 
 /** The play list entry shown in the preview, or null when there are no frames. */
 const currentEntry = () => state.playList[state.position] || null;
@@ -66,6 +104,8 @@ function readSettings() {
     smoothing: number('smoothing'),              // smoothing passes
     minLineLength: number('minLineLength'),      // px at reference detail
     stubLength: number('stubLength'),            // px at reference detail
+    // uploaded frames
+    useUploads: $('#useUploads').checked,        // "Use uploaded frames with export" (off = just a guide on the pad)
     // colour
     colorMode: $('#colorMode').value,            // 'solid' | 'image'
     color: hexToRgb($('#color').value),
@@ -75,8 +115,11 @@ function readSettings() {
     canvasHeight: number('canvasHeight') / 100,
     canvasX: number('canvasX') / 100,            // centre offset, + = right
     canvasY: number('canvasY') / 100,            // centre offset, + = up
-    // laser output
+    // scale & position
     size: number('size') / 100,                  // fraction of the canvas (or of the whole range)
+    artX: number('artX') / 100,                  // move, as a fraction of the canvas width, + = right
+    artY: number('artY') / 100,                  // move, as a fraction of the canvas height, + = up
+    // laser output
     maxPoints: number('maxPoints'),
     pointSpacing: number('pointSpacing'),        // ILDA units between lit points
     cornerHold: number('cornerHold'),            // repeated points at corners
@@ -137,6 +180,15 @@ function resetWallCanvas() {
   render();
 }
 
+/** "Scale & position" starting values. Keep in sync with the value="" in the HTML. */
+const SCALE_POSITION_DEFAULTS = { size: DEFAULT_ART_SIZE * 100, artX: 0, artY: 0 };
+
+function resetScalePosition() {
+  applyValues(SCALE_POSITION_DEFAULTS);
+  rebuildAllLaserFrames();
+  render();
+}
+
 /** "Shape: about 2 wide × 3 tall", so people know what paper to draw on. */
 function describeCanvasShape(settings) {
   const ratio = settings.canvasWidth / settings.canvasHeight;
@@ -160,6 +212,64 @@ function traceSettingsKey(s) {
 
 const nextTick = () => new Promise(resolve => setTimeout(resolve, 0));
 
+// ---------------------------------------------------------------------------
+// Combining a frame's two layers (uploaded + drawn) in the drawing space
+// ---------------------------------------------------------------------------
+
+const NO_LINES = [];
+
+/**
+ * The uploaded layer's lines, placed on the wall by Scale & position and coloured by
+ * the Color settings, in the drawing space. Cached on the frame until something
+ * that affects them changes. The drawing pad also uses this to show them.
+ */
+function uploadedLinesOnWall(frame, settings) {
+  const source = frame.sourceTrace;
+  if (!source) return NO_LINES;
+  const key = [settings.fitToCanvas, settings.canvasWidth, settings.canvasHeight, settings.canvasX, settings.canvasY,
+               settings.size, settings.artX, settings.artY, settings.colorMode, settings.color.join(),
+               wallSpace.width, wallSpace.height].join('|');
+  const cache = frame.uploadedCache;
+  if (cache && cache.key === key && cache.source === source) return cache.paths;
+
+  const toLaser = frame.ilda ? ildaArtToLaser(settings) : pictureToLaser(source.width, source.height, settings);
+  const toWall = laserToWallSpace(wallSpace.width, wallSpace.height, settings);
+  const paths = source.paths.map(path => ({
+    pts: path.pts.map(p => toWall(toLaser(p))),
+    closed: path.closed,
+    color: settings.colorMode === 'image' ? path.color : settings.color,
+  }));
+  frame.uploadedCache = { key, source, paths };
+  return paths;
+}
+
+/** The drawn layer's lines (tidied a little by Simplify and Smoothing), cached the same way. */
+function drawnLinesOnWall(frame, settings) {
+  if (!frame.strokes.length) return NO_LINES;
+  const key = [frame.strokesVersion, frame.strokes.length, settings.simplify, settings.smoothing,
+               wallSpace.width, wallSpace.height].join('|');
+  if (frame.drawnCache && frame.drawnCache.key === key) return frame.drawnCache.paths;
+  const paths = traceDrawing({ width: wallSpace.width, height: wallSpace.height, strokes: frame.strokes }, settings).paths;
+  frame.drawnCache = { key, paths };
+  return paths;
+}
+
+/**
+ * Both layers together: what the laser draws for this frame. The same object comes
+ * back until a layer changes, so in-betweens (cached by trace) aren't redone for nothing.
+ */
+function combinedTrace(frame, settings) {
+  const uploaded = settings.useUploads ? uploadedLinesOnWall(frame, settings) : NO_LINES;
+  const drawn = drawnLinesOnWall(frame, settings);
+  const t = frame.trace;
+  if (t && t.uploaded === uploaded && t.drawn === drawn && t.width === wallSpace.width && t.height === wallSpace.height) return t;
+  frame.trace = { width: wallSpace.width, height: wallSpace.height, paths: uploaded.concat(drawn), uploaded, drawn };
+  return frame.trace;
+}
+
+/** A frame is ready for the laser once its picture (if it has one) is traced with the current settings. */
+const isTraced = (frame, key) => !frame.bitmap || frame.traceKey === key;
+
 /**
  * Re-traces every frame whose trace is out of date. The visible frame goes
  * first so the preview updates quickly; the page stays responsive between frames.
@@ -174,20 +284,19 @@ async function retraceAllFrames() {
 
   // Old in-betweens no longer match the new tracing, so play just the drawn
   // frames until every frame is traced again.
-  if (state.frames.some(frame => frame.traceKey !== key)) showDrawnFramesOnly();
+  if (state.frames.some(frame => !isTraced(frame, key))) showDrawnFramesOnly();
 
   let done = 0;
   for (const index of order) {
     if (run !== state.traceRun) return;     // settings changed again; a newer run takes over
     const frame = state.frames[index];
     if (!frame) continue;
-    if (frame.traceKey !== key) {
+    if (!isTraced(frame, key)) {
       setStatus(`Tracing ${done + 1} / ${count}…`);
-      // Drawn frames are already lines; pictures need tracing.
-      frame.trace = frame.drawing ? traceDrawing(frame, settings) : traceFrame(frame, settings);
+      frame.sourceTrace = traceFrame(frame, settings);   // only pictures need tracing
       frame.traceKey = key;
       frame.cleanPreview = null;
-      frame.laser = buildLaserFrame(frame.trace, settings, [0, 0]);
+      frame.laser = buildLaserFrame(combinedTrace(frame, settings), settings, [0, 0]);
       if (index === current) render();
       await nextTick();
     }
@@ -205,10 +314,13 @@ function scheduleRetrace() {
   retraceDelay = setTimeout(retraceAllFrames, 120);   // wait until the slider stops moving
 }
 
-/** A play list entry for a drawn frame. Its laser is always the frame's current one. */
+/** A play list entry for one of the frames. Its laser is always the frame's current one. */
 function drawnEntry(frame, frameIndex) {
   return { kind: 'drawn', frame, frameIndex, name: frame.name, get laser() { return frame.laser; } };
 }
+
+/** A frame's name for file names and tooltips: the picture's name, or "frame 3". */
+const frameName = (frame, index) => frame.name || `frame ${index + 1}`;
 
 /** Play list of just the drawn frames, staying on the same drawing. */
 function showDrawnFramesOnly() {
@@ -236,6 +348,7 @@ function getInbetweens(frame, next, count) {
  */
 function rebuildAllLaserFrames() {
   const settings = readSettings();
+  const traceKey = traceSettingsKey(settings);
   const keep = currentFrameIndex();          // stay on the same drawing when the list changes
   const list = [];
   let beamPosition = [0, 0];
@@ -246,18 +359,18 @@ function rebuildAllLaserFrames() {
   };
 
   state.frames.forEach((frame, index) => {
-    frame.laser = frame.trace ? toLaser(frame.trace) : null;
+    frame.laser = isTraced(frame, traceKey) ? toLaser(combinedTrace(frame, settings)) : null;   // null = still tracing
     frame.inbetweenNote = '';
     list.push(drawnEntry(frame, index));
 
     // In-betweens lead to the next frame (or back to the first one, for a loop).
     const isLast = index === state.frames.length - 1;
     const next = isLast ? (settings.loopInbetweens ? state.frames[0] : null) : state.frames[index + 1];
-    if (!settings.inbetweens || !next || next === frame || !frame.trace || !next.trace) return;
+    if (!settings.inbetweens || !next || next === frame || !frame.laser || !next.laser) return;
 
     const { traces, reason } = getInbetweens(frame, next, settings.inbetweens);
     if (!traces) { frame.inbetweenNote = reason; return; }
-    const baseName = frame.name.replace(/\.[^.]+$/, '');
+    const baseName = frameName(frame, index).replace(/\.[^.]+$/, '');
     traces.forEach((trace, k) => list.push({
       kind: 'inbetween', frameIndex: index, step: k + 1, of: traces.length,
       name: `${baseName}+${k + 1}`, laser: toLaser(trace),
@@ -274,33 +387,81 @@ const allFramesReady = () => state.frames.length > 0 && state.frames.every(f => 
 // Loading and removing frames
 // ---------------------------------------------------------------------------
 
+/**
+ * Adds pictures and .ild files. They become the uploaded layer of frames that
+ * don't have one yet (so you can draw first and add pictures after), in order
+ * from the first frame; any left over become new frames at the end.
+ */
 async function addFrameFiles(files) {
-  const images = [...files].filter(file => file.type.startsWith('image/'));
-  if (!images.length) return;
-  setStatus('Loading images…');
+  const byName = (a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+  const uploads = [];
+  const notes = [];
+  setStatus('Loading…');
 
-  for (const file of images) {
+  // Pictures, in natural filename order so "frame2" comes before "frame10".
+  for (const file of [...files].filter(file => file.type.startsWith('image/')).sort(byName)) {
     try {
-      const bitmap = await createImageBitmap(file);
-      state.frames.push({ name: file.name, bitmap, thumbUrl: URL.createObjectURL(file) });
+      uploads.push({ name: file.name, bitmap: await createImageBitmap(file), thumbUrl: URL.createObjectURL(file) });
     } catch (error) {
       console.warn('Could not read', file.name, error);
     }
   }
-  // Natural sort, so "frame2" comes before "frame10".
-  state.frames.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+  // .ild laser files: every frame of the file. They are already lines, so no tracing.
+  for (const file of [...files].filter(file => /\.ild$/i.test(file.name)).sort(byName)) {
+    const { frames, note } = readIldaFile(new Uint8Array(await file.arrayBuffer()));
+    if (!frames.length) { notes.push(`"${file.name}" doesn't have any laser frames this app can read.`); continue; }
+    frames.forEach((frame, index) => uploads.push({ name: `${file.name} #${index + 1}`, ilda: true, sourceTrace: ildaFrameToTrace(frame.points) }));
+    notes.push(`Opened "${file.name}": ${frames.length} frame${frames.length > 1 ? 's' : ''}.` + (note ? ' ' + note : ''));
+    if (ildaFileGoesOutside(frames, readSettings())) {
+      notes.push('Some of it is outside the wall canvas. Lower Size in "5 Scale & position" to fit it.');
+    }
+    $('#colorMode').value = 'image';          // keep the colours the file was made with
+  }
+  setStatus('');
+  if (!uploads.length) { if (notes.length) showNotice(notes.join(' ')); return; }
 
-  // Suggest a file name from the frames, e.g. "Fox_001.jpg" -> "Fox".
+  // Fill frames that have no upload yet, then add the rest at the end.
+  let index = 0;
+  for (const upload of uploads) {
+    while (index < state.frames.length && hasUpload(state.frames[index])) index++;
+    if (index === state.frames.length) state.frames.push(makeFrame());
+    Object.assign(state.frames[index], upload, { traceKey: null, working: null, cleanPreview: null });
+    index++;
+  }
+
+  // Suggest a file name from the first upload, e.g. "Fox_001.jpg" -> "Fox".
   const fileName = $('#fileName');
-  if (fileName.value === 'laser-animation' && state.frames[0]) {
-    const base = state.frames[0].name.replace(/\.[^.]+$/, '').replace(/[-_ ]*\d+$/, '');
+  if (fileName.value === 'laser-animation') {
+    const base = uploads[0].name.replace(/ #\d+$/, '').replace(/\.[^.]+$/, '').replace(/[-_ ]*\d+$/, '');
     if (base) fileName.value = base;
   }
 
   $('#examplesGroup').open = false;          // make room once real frames are in
+  showNotice(notes.join(' '));
+  frameListChanged();
   showDrawnFramesOnly();
+  rebuildAllLaserFrames();                   // .ild frames and drawn lines are ready straight away
   render();
   retraceAllFrames();
+}
+
+/** An .ild frame's points as lines (ILDA units), the same shape a traced picture has. */
+function ildaFrameToTrace(points) {
+  const paths = ildaFrameToStrokes(points).map(stroke => {
+    let pts = stroke.pts;
+    if (pts.length === 1) pts = [pts[0], pts[0]];                 // a dot
+    else if (pts.length > 2) pts = simplifyOpenPath(pts, 30);      // drop points that add nothing (30 ILDA units is about half a pad pixel)
+    return { pts, closed: stroke.closed && pts.length > 2, color: stroke.rgb };
+  });
+  return { width: ILDA_SPAN, height: ILDA_SPAN, mask: null, threshold: null, paths };
+}
+
+/** True if any lit point of the file lands outside the wall canvas (at the starting Scale & position). */
+function ildaFileGoesOutside(frames, settings) {
+  const box = wallCanvasBox(settings);
+  const margin = 200;
+  return frames.some(frame => frame.points.some(p => !p.blank &&
+    (p.x < box.left - margin || p.x > box.right + margin || p.y < box.bottom - margin || p.y > box.top + margin)));
 }
 
 /** Loads the built-in fox animation from sample-fox.js. */
@@ -314,37 +475,38 @@ function loadSampleAnimation() {
   return addFrameFiles(files);
 }
 
-/**
- * Replaces the studio's frames with frames from the drawing pad (draw-pad.js).
- * Each has { name, bitmap, thumbUrl, drawing }. Drawn lines keep their own colours.
- */
-function loadDrawnFrames(frames) {
-  setPlaying(false);
-  state.frames.forEach(frame => URL.revokeObjectURL(frame.thumbUrl));
-  state.frames = frames;
-  state.playList = [];
-  state.position = 0;
-  $('#colorMode').value = 'image';            // keep the colours people drew with
-  if ($('#fileName').value === 'laser-animation') $('#fileName').value = 'my-drawing';
-  $('#examplesGroup').open = false;
-  showDrawnFramesOnly();
-  render();
-  retraceAllFrames();
+/** Tells the drawing pad (draw-pad.js) that frames were added or removed. */
+function frameListChanged() {
+  if (typeof padFrameListChanged === 'function') padFrameListChanged();
+}
+
+/** A short message at the top of the main area (both the studio and the drawing pad). Empty text hides it. */
+function showNotice(text) {
+  const notice = $('#notice');
+  notice.textContent = text || '';
+  notice.hidden = !text;
 }
 
 function removeFrame(index) {
-  URL.revokeObjectURL(state.frames[index].thumbUrl);
+  const frame = state.frames[index];
+  if (frame.strokes.length && !confirm(`Remove frame ${index + 1}? Its drawn lines go too.`)) return;
+  if (frame.thumbUrl) URL.revokeObjectURL(frame.thumbUrl);
   state.frames.splice(index, 1);
+  frameListChanged();
   rebuildAllLaserFrames();
   render();
 }
 
 function clearAllFrames() {
+  const hasDrawing = state.frames.some(frame => frame.strokes.length);
+  if (hasDrawing && !confirm("Remove every frame, including the lines you drew? This can't be undone.")) return;
   setPlaying(false);
-  state.frames.forEach(frame => URL.revokeObjectURL(frame.thumbUrl));
+  state.frames.forEach(frame => { if (frame.thumbUrl) URL.revokeObjectURL(frame.thumbUrl); });
   state.frames = [];
   state.playList = [];
   state.position = 0;
+  showNotice('');
+  frameListChanged();
   render();
 }
 
@@ -359,24 +521,49 @@ function renderSource() {
   const frame = state.frames[currentFrameIndex()];   // for an in-between: the drawing it starts from
   if (!frame) return;
   const canvas = $('#sourceCanvas'), ctx = canvas.getContext('2d');
-  const showCleaned = $('#sourceView').value === 'clean' && frame.trace && frame.trace.mask;   // drawn frames have no mask
-  const w = showCleaned ? frame.trace.width : frame.bitmap.width;
-  const h = showCleaned ? frame.trace.height : frame.bitmap.height;
+  if (!frame.bitmap) return renderLinesOnly(canvas, frame);   // drawn lines or an .ild frame: no picture
+  const source = frame.sourceTrace;
+  const showCleaned = $('#sourceView').value === 'clean' && source && source.mask;
+  const w = showCleaned ? source.width : frame.bitmap.width;
+  const h = showCleaned ? source.height : frame.bitmap.height;
   const scale = 400 / Math.max(w, h);
   canvas.width = Math.round(w * scale);
   canvas.height = Math.round(h * scale);
   ctx.imageSmoothingEnabled = !showCleaned;   // keep the mask's pixels crisp
 
   if (showCleaned) {
-    if (!frame.cleanPreview) frame.cleanPreview = maskToCanvas(frame.trace.mask, w, h);
+    if (!frame.cleanPreview) frame.cleanPreview = maskToCanvas(source.mask, w, h);
     ctx.drawImage(frame.cleanPreview, 0, 0, canvas.width, canvas.height);
   } else {
     ctx.fillStyle = '#fff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(frame.bitmap, 0, 0, canvas.width, canvas.height);
   }
-  if (readSettings().autoThreshold && frame.trace) {
-    $('output[for=threshold]').textContent = 'auto ' + frame.trace.threshold;
+  if (readSettings().autoThreshold && source) {
+    $('output[for=threshold]').textContent = 'auto ' + source.threshold;
+  }
+}
+
+/**
+ * Draws a frame's lines (both layers, in the drawing space) on a dark background,
+ * for frames that have no picture. Used for the Source view and filmstrip thumbnails.
+ */
+function renderLinesOnly(canvas, frame, longestSide = 400) {
+  const trace = frame.trace || combinedTrace(frame, readSettings());
+  const scale = longestSide / Math.max(trace.width, trace.height);
+  canvas.width = Math.round(trace.width * scale);
+  canvas.height = Math.round(trace.height * scale);
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#050608';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.lineWidth = Math.max(1, 3 * scale);
+  ctx.lineCap = ctx.lineJoin = 'round';
+  for (const path of trace.paths) {
+    ctx.strokeStyle = `rgb(${path.color.join(',')})`;
+    ctx.beginPath();
+    path.pts.forEach(([x, y], i) => (i ? ctx.lineTo(x * scale, y * scale) : ctx.moveTo(x * scale, y * scale)));
+    if (path.closed) ctx.closePath();
+    ctx.stroke();
   }
 }
 
@@ -427,7 +614,7 @@ function renderLaser() {
   const entry = currentEntry();
   const laser = entry && entry.laser;
   const frame = entry && entry.kind === 'drawn' ? entry.frame : null;   // in-betweens have no picture to overlay
-  if (frame && $('#showOverlay').checked) {
+  if (frame && frame.bitmap && $('#showOverlay').checked) {
     const toLaser = pictureToLaser(frame.bitmap.width, frame.bitmap.height, settings);
     const [left, top] = toLaser([0, 0]);
     const [right, bottom] = toLaser([frame.bitmap.width, frame.bitmap.height]);
@@ -551,12 +738,22 @@ function renderFilmstrip() {
     if (entry.kind === 'drawn') {
       const { frame, frameIndex } = entry;
       item.className = 'thumb';
-      item.title = frame.name;
+      item.title = frameName(frame, frameIndex) + (frame.strokes.length ? ' + drawn lines' : '');
       const pointCount = frame.laser ? frame.laser.points.length : '…';
       item.innerHTML =
-        `<img alt=""><div class="caption"><b>${frameIndex + 1}</b> · ${pointCount} pts</div>` +
+        `<div class="caption"><b>${frameIndex + 1}</b>${frame.strokes.length ? ' ✎' : ''} · ${pointCount} pts</div>` +
         `<button class="remove" title="Remove frame">×</button>`;
-      item.querySelector('img').src = frame.thumbUrl;
+      // Pictures show the picture; frames without one show their lines.
+      if (frame.bitmap) {
+        const img = document.createElement('img');
+        img.alt = '';
+        img.src = frame.thumbUrl;
+        item.prepend(img);
+      } else {
+        const lines = document.createElement('canvas');
+        renderLinesOnly(lines, frame, 120);
+        item.prepend(lines);
+      }
       item.querySelector('.remove').onclick = event => { event.stopPropagation(); removeFrame(frameIndex); };
       strip.appendChild(item);
       if (frame.inbetweenNote) {
@@ -630,6 +827,7 @@ function render() {
   renderStats();
   renderFilmstrip();
   renderExportSummary();
+  if (typeof renderPadIfOpen === 'function') renderPadIfOpen();   // the pad shows the same frames (draw-pad.js)
 }
 
 // ---------------------------------------------------------------------------
@@ -698,8 +896,13 @@ function downloadIldaFile() {
 // Wiring up the page
 // ---------------------------------------------------------------------------
 
-/** Shows a slider's value next to it, formatted by its <output data-format>. */
+/**
+ * Shows a slider's value next to it: either in a typed number box
+ * (<input class="typed" data-for="id">) or in an <output>, formatted by its data-format.
+ */
 function showSliderValue(input) {
+  const typed = document.querySelector(`input.typed[data-for="${input.id}"]`);
+  if (typed && document.activeElement !== typed) typed.value = input.value;
   const output = document.querySelector(`output[for="${input.id}"]`);
   if (!output) return;
   const value = Number(input.value);
@@ -716,6 +919,23 @@ function setUpControls() {
   document.querySelectorAll('input[type=range]').forEach(input => {
     showSliderValue(input);
     input.addEventListener('input', () => showSliderValue(input));
+  });
+
+  // Typed number boxes next to sliders: typing moves the slider (kept within its
+  // min and max) and then acts exactly like dragging it.
+  document.querySelectorAll('input.typed').forEach(typed => {
+    const slider = document.getElementById(typed.dataset.for);
+    typed.min = slider.min; typed.max = slider.max; typed.step = slider.step;
+    const useTypedValue = () => {
+      if (typed.value === '' || isNaN(Number(typed.value))) return;
+      const value = Math.max(Number(slider.min), Math.min(Number(slider.max), Number(typed.value)));
+      slider.value = value;
+      slider.dispatchEvent(new Event('input'));
+      slider.dispatchEvent(new Event('change'));
+    };
+    typed.addEventListener('input', useTypedValue);
+    typed.addEventListener('change', () => { useTypedValue(); typed.value = slider.value; });   // show the kept value
+    typed.addEventListener('blur', () => { typed.value = slider.value; });
   });
 
   // Settings: re-trace or just rebuild the laser points, depending on data-stage.
@@ -751,6 +971,7 @@ function setUpControls() {
   for (const id of ['#showJumps', '#showPoints', '#showOverlay', '#showCanvas']) $(id).onchange = renderLaser;
   document.querySelectorAll('[data-remember]').forEach(input => input.addEventListener('input', rememberSettings));
   $('#resetCanvasButton').onclick = resetWallCanvas;
+  $('#resetScaleButton').onclick = resetScalePosition;
   $('#sourceView').onchange = renderSource;
   $('#exportButton').onclick = downloadIldaFile;
 
@@ -770,4 +991,4 @@ setUpControls();
 render();
 
 // Handles for automated tests and debugging from the browser console.
-window.LaserFrameStudio = { state, addFrameFiles, loadSampleAnimation, readSettings, rebuildAllLaserFrames, writeIldaFile, makeInbetweenTraces };
+window.LaserFrameStudio = { state, wallSpace, addFrameFiles, loadSampleAnimation, readSettings, rebuildAllLaserFrames, writeIldaFile, makeInbetweenTraces };
