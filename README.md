@@ -4,9 +4,21 @@ Turn a set of animation frames (JPG or PNG) into a `.ild` laser animation for th
 **LaserCube** (built and tested on the LaserCube Ultra 7.5W with LaserOS).
 
 ## To install
-1. Download the zip of this repo. (look for a drop down on a green button that says code, then download zip)
-2. Unzip the file. Keep all files together in that folder.
-3. Double-click `laser-frame-studio.html` to open it in a browser.
+
+[![Download Laser Frame Studio](images/download-button.svg)](https://github.com/Jack-s-Urban-Meeting-Place/laser-frame-studio/archive/refs/heads/main.zip)
+
+1. **Click the green button above.** A zip file called `laser-frame-studio-main.zip`
+   (about 7 MB) downloads to your **Downloads** folder.
+2. **Unzip it:**
+   - **Windows:** right-click the zip file, choose **Extract All…**, then click **Extract**.
+   - **Mac:** double-click the zip file.
+3. **Open the new `laser-frame-studio-main` folder** and double-click
+   **`laser-frame-studio.html`**. It opens in your web browser (Chrome or Edge work best).
+   No internet needed after that.
+
+> **Tip:** On Windows, double-clicking a zip only *peeks inside* it. If you open the app
+> from there, it can't find its other files and won't work. Do **Extract All…** first,
+> and keep all the files together in that folder.
 
 This project is :
 - **Private.** Images are processed on your computer and never uploaded anywhere.

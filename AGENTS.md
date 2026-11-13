@@ -412,3 +412,7 @@ frame image
 - **v1.6.1 (2026-11-12):** the five "See it on the wall" videos are now small MP4s
   (about 6 MB in total, down from 58 MB of .mov) and are included in the GitHub
   copy, so the buttons work for everyone. MP4 also plays in Firefox and Safari.
+- **README (2026-11-13):** "To install" now has a big green download button
+  (`images/download-button.svg`, linked to GitHub's main.zip) and step-by-step unzip
+  help for Windows and Mac, because team testers struggled to find the zip and
+  opened the app from inside it without extracting.

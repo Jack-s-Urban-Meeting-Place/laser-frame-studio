@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="360" height="56" viewBox="0 0 360 56" role="img" aria-label="Download Laser Frame Studio (.zip)">
+  <!-- The "Download" button shown in README.md. It's only a picture; the link
+       around it in the README does the downloading. Colours match the app. -->
+  <title>Download Laser Frame Studio (.zip)</title>
+  <rect x="1" y="1" width="358" height="54" rx="12" fill="#39ff88" stroke="#1fbf5f" stroke-width="2"/>
+  <!-- download arrow -->
+  <g fill="none" stroke="#062a14" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M32 15 v18"/>
+    <path d="M24 26 l8 8 l8 -8"/>
+    <path d="M22 40 h20"/>
+  </g>
+  <text x="56" y="34" fill="#062a14" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="19" font-weight="700">Download Laser Frame Studio</text>
+</svg>
